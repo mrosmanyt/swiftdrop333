@@ -466,4 +466,21 @@ CREATE TABLE IF NOT EXISTS offers (
 );
 CREATE INDEX IF NOT EXISTS idx_offers_order ON offers(order_id, status);
 CREATE INDEX IF NOT EXISTS idx_offers_courier ON offers(courier_id, status);
+
+-- Web push subscriptions. subject_type/subject_id is either a signed-in
+-- account ("user", the user's id — driver/merchant/admin) or a guest
+-- customer's own delivery ("order", the order id — there's no customer
+-- account to key it to, so the tracking page itself is the subject).
+-- endpoint is unique per browser+device, so re-subscribing (e.g. after
+-- permission was re-granted) just updates the existing row.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  subject_type TEXT NOT NULL,   -- user | order
+  subject_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_push_subject ON push_subscriptions(subject_type, subject_id);
 `);

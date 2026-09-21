@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { pushToOrder, pushToUser } from "@/lib/push";
 
 /**
  * Notifications — SMS and email.
@@ -168,15 +169,31 @@ export async function notifyCourierAssigned(order: OrderLike) {
       body,
       orderId: order.id,
     }),
+    pushToOrder(order.id, {
+      title: "Courier on the way",
+      body: `Your ${order.merchantBusinessName ?? APP_NAME} order has a courier heading to you.`,
+      url: trackingUrl(order.id),
+      tag: "order-status",
+    }),
   ]);
 }
 
 export async function notifyPickedUp(order: OrderLike) {
   const body = `Your order has been picked up and is on its way to ${order.dropoffAddress}. Live tracking: ${trackingUrl(order.id)}`;
-  await send({ channel: "sms", to: order.customerPhone ?? "", template: "picked_up", body, orderId: order.id });
+  await Promise.all([
+    send({ channel: "sms", to: order.customerPhone ?? "", template: "picked_up", body, orderId: order.id }),
+    pushToOrder(order.id, {
+      title: "Picked up",
+      body: `Your order is on its way to ${order.dropoffAddress}.`,
+      url: trackingUrl(order.id),
+      tag: "order-status",
+    }),
+  ]);
 }
 
-export async function notifyDelivered(order: OrderLike, merchantEmail?: string | null) {
+/** merchantUserId, when known, also pushes the merchant — their email
+ * already gets notified below, this just makes it show up instantly too. */
+export async function notifyDelivered(order: OrderLike, merchantEmail?: string | null, merchantUserId?: string | null) {
   const customerBody = `Your delivery has arrived. Photo proof and a quick rating: ${trackingUrl(order.id)}`;
   await Promise.all([
     send({ channel: "sms", to: order.customerPhone ?? "", template: "delivered", body: customerBody, orderId: order.id }),
@@ -188,6 +205,20 @@ export async function notifyDelivered(order: OrderLike, merchantEmail?: string |
       body: `Your delivery to ${order.customerName} (${order.dropoffAddress}) was completed. Details: ${trackingUrl(order.id)}`,
       orderId: order.id,
     }),
+    pushToOrder(order.id, {
+      title: "Delivered",
+      body: "Your order has arrived. Tap to leave a rating.",
+      url: trackingUrl(order.id),
+      tag: "order-status",
+    }),
+    merchantUserId
+      ? pushToUser(merchantUserId, {
+          title: `Delivered — ${order.customerName}`,
+          body: `${order.dropoffAddress}`,
+          url: `/merchant/orders/${order.id}`,
+          tag: "order-delivered",
+        })
+      : Promise.resolve(),
   ]);
 }
 

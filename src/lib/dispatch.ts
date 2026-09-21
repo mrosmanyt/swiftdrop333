@@ -9,6 +9,7 @@ import {
   setOrderRouteInfo,
 } from "@/lib/repo";
 import { haversineKm, routeBetween } from "@/lib/geo";
+import { pushToUser } from "@/lib/push";
 
 /**
  * Auto-dispatch engine.
@@ -80,6 +81,18 @@ export function dispatchOrder(orderId: string): { offered: boolean; courierId?: 
 
   const best = rankCandidates(candidates, { lat: order.pickupLat, lng: order.pickupLng })[0];
   createOffer(orderId, best.id, OFFER_TTL_SECONDS);
+
+  // Fire-and-forget: a driver's offer is timed (OFFER_TTL_SECONDS), so this
+  // needs to reach them the moment it's created, not whenever they next
+  // happen to check the app. dispatchOrder stays synchronous — the push
+  // itself is a background network call that shouldn't block dispatch.
+  void pushToUser(best.userId, {
+    title: "New delivery offer",
+    body: `Nearby pickup${order.pickupAddress ? ` at ${order.pickupAddress}` : ""} — ${OFFER_TTL_SECONDS}s to accept`,
+    url: "/driver/offers",
+    tag: "offer",
+  }).catch(() => {});
+
   return { offered: true, courierId: best.id };
 }
 

@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (order) {
     const merchant = getMerchantProfileById(order.merchantId);
     const merchantUser = merchant ? findUserById(merchant.userId) : null;
-    await notifyDelivered(order as any, merchantUser?.email ?? null);
+    await notifyDelivered(order as any, merchantUser?.email ?? null, merchantUser?.id ?? null);
   }
 
   return NextResponse.json({ ok: true });

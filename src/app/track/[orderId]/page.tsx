@@ -1,9 +1,10 @@
 import { cookies, headers } from "next/headers";
 import { getOrderById } from "@/lib/repo";
-import { isLocale, localeFromHeader, t, Locale } from "@/lib/i18n";
+import { isLocale, localeFromHeader, t, Locale, RTL_LOCALES } from "@/lib/i18n";
 import TrackingLive from "@/components/TrackingLive";
 import SupportWidget from "@/components/SupportWidget";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import PushOptIn from "@/components/PushOptIn";
 
 /**
  * No-login customer tracking page, in the customer's language.
@@ -24,6 +25,9 @@ export default async function TrackOrderPage({
     : localeFromHeader(headers().get("accept-language"));
 
   const order = getOrderById(params.orderId);
+  // Urdu/Arabic read right-to-left — flip just this page's direction
+  // rather than the whole site chrome, which stays English-authored.
+  const dir = RTL_LOCALES.includes(locale) ? "rtl" : "ltr";
 
   if (!order) {
     return (
@@ -37,8 +41,9 @@ export default async function TrackOrderPage({
   }
 
   return (
-    <main>
-      <div className="mx-auto flex max-w-md items-center justify-end px-6 pt-4">
+    <main dir={dir}>
+      <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-6 pt-4">
+        <PushOptIn orderId={order.id} label="Get delivery alerts" />
         <LanguageSwitcher current={locale} />
       </div>
 

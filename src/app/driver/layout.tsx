@@ -1,5 +1,6 @@
 import PortalSidebar, { type SidebarLink } from "@/components/portal/PortalSidebar";
 import DriverLocationControl from "@/components/DriverLocationControl";
+import PushOptIn from "@/components/PushOptIn";
 
 function Icon({ d }: { d: string }) {
   return (
@@ -27,7 +28,12 @@ export default function DriverLayout({ children }: { children: React.ReactNode }
         brand="Driver"
         homeHref="/driver/offers"
         groups={[{ links: LINKS }]}
-        headerExtra={<DriverLocationControl />}
+        headerExtra={
+          <>
+            <PushOptIn label="Offer alerts" />
+            <DriverLocationControl />
+          </>
+        }
       />
       {/* md:ml-56 matches the sidebar's fixed width so content never sits
           underneath it; on phones there's no sidebar to offset. */}

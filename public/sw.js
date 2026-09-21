@@ -38,3 +38,39 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// A new delivery offer for a driver, or an order status change for a
+// customer — sent from the server via src/lib/push.ts. The payload is
+// plain JSON: { title, body, url?, tag? }.
+self.addEventListener("push", (event) => {
+  let data = { title: "SwiftDrop", body: "" };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    if (event.data) data.body = event.data.text();
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.tag,
+      data: { url: data.url || "/" },
+    })
+  );
+});
+
+// Tapping the notification focuses an already-open SwiftDrop tab if one is
+// on the right page, otherwise opens a new one at the notification's URL.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(targetUrl) && "focus" in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
+});
