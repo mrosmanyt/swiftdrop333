@@ -701,6 +701,7 @@ function mapOrder(r: any) {
     refundAmountCents: r.refund_amount_cents ?? null,
     refundNote: r.refund_note ?? null,
     refundedAt: r.refunded_at ?? null,
+    slaBreachAlertedAt: r.sla_breach_alerted_at ?? null,
     createdAt: r.created_at,
     assignedAt: r.assigned_at,
     pickedUpAt: r.picked_up_at,
@@ -2464,6 +2465,179 @@ export function merchantAnalytics(merchantId: string, days = 14) {
     .map(toPlain) as any[];
 
   return { dailySeries, topCustomers, successRate, delivered, terminal, serviceBreakdown };
+}
+
+// ---------------------------------------------------------------------------
+// Admin financial reporting & reconciliation — platform-wide revenue,
+// what's owed to couriers, and what's already gone back out as refunds.
+// Deliberately reads straight off orders/payout_requests rather than
+// keeping a running ledger table: at this volume a query is simpler and
+// can never drift out of sync with the source rows.
+// ---------------------------------------------------------------------------
+
+export function financialSummary(days = 30) {
+  const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
+
+  const totals = toPlain(
+    db
+      .prepare(
+        `SELECT COUNT(*) as deliveredOrders,
+                COALESCE(SUM(price_cents), 0) as grossRevenueCents,
+                COALESCE(SUM(platform_fee_cents), 0) as platformFeeCents,
+                COALESCE(SUM(courier_fee_cents), 0) as courierFeeCents
+         FROM orders
+         WHERE status = 'DELIVERED' AND deleted_at IS NULL AND delivered_at >= ?`
+      )
+      .get(since)
+  ) as any;
+
+  const refunded = toPlain(
+    db
+      .prepare(
+        `SELECT COUNT(*) as refundCount, COALESCE(SUM(refund_amount_cents), 0) as refundedCents
+         FROM orders
+         WHERE refund_status = 'refunded' AND refunded_at >= ?`
+      )
+      .get(since)
+  ) as any;
+
+  const payouts = db
+    .prepare(
+      `SELECT status,
+              COUNT(*) as n,
+              COALESCE(SUM(amount_cents), 0) as amountCents,
+              COALESCE(SUM(fee_cents), 0) as feeCents
+       FROM payout_requests
+       WHERE created_at >= ?
+       GROUP BY status`
+    )
+    .all(since)
+    .map(toPlain) as { status: string; n: number; amountCents: number; feeCents: number }[];
+  const paidOutCents = payouts.filter((p) => p.status === "paid").reduce((s, p) => s + p.amountCents, 0);
+  const pendingPayoutCents = payouts
+    .filter((p) => p.status === "requested" || p.status === "approved")
+    .reduce((s, p) => s + p.amountCents, 0);
+
+  const dailySeries = db
+    .prepare(
+      `SELECT date(delivered_at) as date,
+              COUNT(*) as orders,
+              COALESCE(SUM(price_cents), 0) as grossCents,
+              COALESCE(SUM(platform_fee_cents), 0) as platformCents,
+              COALESCE(SUM(courier_fee_cents), 0) as courierCents
+       FROM orders
+       WHERE status = 'DELIVERED' AND deleted_at IS NULL AND delivered_at >= ?
+       GROUP BY date(delivered_at)
+       ORDER BY date ASC`
+    )
+    .all(since)
+    .map(toPlain) as any[];
+
+  return {
+    since,
+    deliveredOrders: totals.deliveredOrders as number,
+    grossRevenueCents: totals.grossRevenueCents as number,
+    platformFeeCents: totals.platformFeeCents as number,
+    courierFeeCents: totals.courierFeeCents as number,
+    refundCount: refunded.refundCount as number,
+    refundedCents: refunded.refundedCents as number,
+    paidOutCents,
+    pendingPayoutCents,
+    netRevenueCents: (totals.platformFeeCents as number) - (refunded.refundedCents as number),
+    dailySeries,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Driver gamification — a rolling leaderboard ranked by deliveries
+// completed in the last 7 days. No separate points/XP table: the same
+// numbers that already drive tier/pay (deliveries, fees earned) are what
+// the board ranks on, so it can never disagree with a courier's own stats.
+// ---------------------------------------------------------------------------
+
+export function weeklyLeaderboard(limit = 20) {
+  const since = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
+  return db
+    .prepare(
+      `SELECT c.id as courierId,
+              COALESCE(c.full_name, u.email) as name,
+              c.tier as tier,
+              c.rating as rating,
+              COUNT(o.id) as deliveries,
+              COALESCE(SUM(o.courier_fee_cents), 0) as earnedCents
+       FROM courier_profiles c
+       JOIN users u ON u.id = c.user_id
+       LEFT JOIN orders o ON o.courier_id = c.id AND o.status = 'DELIVERED' AND o.delivered_at >= ?
+       WHERE c.approval_status = 'approved' AND c.deleted_at IS NULL
+       GROUP BY c.id
+       HAVING deliveries > 0
+       ORDER BY deliveries DESC, earnedCents DESC
+       LIMIT ?`
+    )
+    .all(since, limit)
+    .map(toPlain) as { courierId: string; name: string; tier: string; rating: number; deliveries: number; earnedCents: number }[];
+}
+
+/** Where a specific courier sits on the same ranking, even if they fall
+ * outside the top `limit` shown on the board — so "your rank" is always
+ * answerable without pulling every courier's stats client-side. */
+export function courierWeeklyRank(courierId: string) {
+  const board = weeklyLeaderboard(10_000);
+  const index = board.findIndex((r) => r.courierId === courierId);
+  if (index === -1) return { rank: null, deliveries: 0, earnedCents: 0 };
+  return { rank: index + 1, deliveries: board[index].deliveries, earnedCents: board[index].earnedCents, total: board.length };
+}
+
+// ---------------------------------------------------------------------------
+// SLA / late-delivery monitoring. An order with a promised window_end that
+// slips past it while still in flight gets flagged exactly once — the
+// dispatch tick is what notices, same as the surge-alert check below it.
+// ---------------------------------------------------------------------------
+
+const IN_FLIGHT_STATUSES = ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"];
+
+/** Orders currently past their promised window and not yet flagged. */
+export function findNewSlaBreaches() {
+  const placeholders = IN_FLIGHT_STATUSES.map(() => "?").join(",");
+  return db
+    .prepare(
+      `SELECT o.*, m.business_name as merchant_business_name
+       FROM orders o
+       LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
+       WHERE o.status IN (${placeholders})
+         AND o.deleted_at IS NULL
+         AND o.window_end IS NOT NULL
+         AND o.window_end < ?
+         AND o.sla_breach_alerted_at IS NULL`
+    )
+    .all(...IN_FLIGHT_STATUSES, now())
+    .map(mapOrder);
+}
+
+export function markSlaBreachAlerted(orderId: string) {
+  db.prepare(`UPDATE orders SET sla_breach_alerted_at = ? WHERE id = ?`).run(now(), orderId);
+}
+
+/** Everything currently late, for the admin ops view — includes orders
+ * already flagged, not just the freshly-detected ones above. */
+export function listCurrentSlaBreaches(limit = 100) {
+  const placeholders = IN_FLIGHT_STATUSES.map(() => "?").join(",");
+  return db
+    .prepare(
+      `SELECT o.*, m.business_name as merchant_business_name, u.email as courier_email
+       FROM orders o
+       LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
+       LEFT JOIN courier_profiles cp ON cp.id = o.courier_id
+       LEFT JOIN users u ON u.id = cp.user_id
+       WHERE o.status IN (${placeholders})
+         AND o.deleted_at IS NULL
+         AND o.window_end IS NOT NULL
+         AND o.window_end < ?
+       ORDER BY o.window_end ASC
+       LIMIT ?`
+    )
+    .all(...IN_FLIGHT_STATUSES, now(), limit)
+    .map(mapOrder);
 }
 
 // ---------------------------------------------------------------------------

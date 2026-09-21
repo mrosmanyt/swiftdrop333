@@ -31,6 +31,7 @@ const GROUPS: { title: string; links: SidebarLink[] }[] = [
       { href: "/admin/dashboard", label: "Overview", icon: <Icon d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z" /> },
       { href: "/admin/live-map", label: "Live map", icon: <Icon d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3zM9 7v13M15 4v13" /> },
       { href: "/admin/forecast", label: "Forecast", icon: <Icon d="M3 3v18h18M7 15l4-5 3 3 5-7" /> },
+      { href: "/admin/finance", label: "Finance", icon: <Icon d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
     ],
   },
   {

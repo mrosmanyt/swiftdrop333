@@ -9,6 +9,8 @@ import DispatchTicker from "@/components/DispatchTicker";
 import DownloadCsvButton from "@/components/DownloadCsvButton";
 import AdminDeleteButton from "@/components/AdminDeleteButton";
 
+const IN_FLIGHT = ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"];
+
 export default async function AdminOrdersPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
@@ -74,6 +76,11 @@ export default async function AdminOrdersPage() {
                         minute: "2-digit",
                       })
                     : "ASAP"}
+                  {IN_FLIGHT.includes(o!.status) && o!.windowEnd && new Date(o!.windowEnd) < new Date() && (
+                    <div className="mt-1 inline-block rounded-full bg-danger-soft px-2 py-0.5 text-[10px] font-medium text-danger">
+                      LATE
+                    </div>
+                  )}
                 </td>
                 <td className="p-3 text-xs text-fg-muted">{o!.dispatchMode}</td>
                 <td className="p-3">

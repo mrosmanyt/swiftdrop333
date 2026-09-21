@@ -1,9 +1,14 @@
 import {
+  adminUserIds,
   candidateCouriersForOrder,
   createOffer,
   expireStaleOffers,
+  findNewSlaBreaches,
   getActiveOfferForOrder,
+  getMerchantProfileById,
   getOrderById,
+  findUserById,
+  markSlaBreachAlerted,
   maybeCreateSurgeAlert,
   onlineCourierUserIds,
   ordersNeedingDispatch,
@@ -116,8 +121,48 @@ export function runDispatchTick() {
   }
 
   checkSurgeZones();
+  checkSlaBreaches();
 
   return { expired, considered: pending.length, offered, broadcast };
+}
+
+/**
+ * SLA watch — once per tick, look for in-flight orders that just slipped
+ * past their promised window_end. Each one is flagged exactly once
+ * (findNewSlaBreaches only returns orders with sla_breach_alerted_at still
+ * null), so ops and the merchant both get a single heads-up rather than a
+ * push every tick for the same late order.
+ */
+function checkSlaBreaches() {
+  const breaches = findNewSlaBreaches();
+  if (!breaches.length) return;
+
+  const admins = adminUserIds();
+  for (const order of breaches) {
+    if (!order) continue;
+    markSlaBreachAlerted(order.id);
+
+    const label = order.customerName ? `${order.customerName} — ${order.dropoffAddress}` : order.dropoffAddress;
+    for (const adminId of admins) {
+      void pushToUser(adminId, {
+        title: "Late delivery",
+        body: `${label} has passed its promised window.`,
+        url: `/admin/orders`,
+        tag: "sla-breach",
+      }).catch(() => {});
+    }
+
+    const merchant = order.merchantId ? getMerchantProfileById(order.merchantId) : null;
+    const merchantUser = merchant ? findUserById(merchant.userId) : null;
+    if (merchantUser) {
+      void pushToUser(merchantUser.id, {
+        title: "Delivery running late",
+        body: `${label} has passed its promised delivery window.`,
+        url: `/merchant/orders/${order.id}`,
+        tag: "sla-breach",
+      }).catch(() => {});
+    }
+  }
 }
 
 /**

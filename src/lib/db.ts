@@ -349,6 +349,11 @@ ensureColumn("orders", "refund_amount_cents", "INTEGER");
 ensureColumn("orders", "refund_note", "TEXT");
 ensureColumn("orders", "refunded_at", "TEXT");
 
+// --- Step 9: SLA breach tracking. Set once (by the dispatch tick) the first
+// time an in-flight order is spotted past its promised window_end, so the
+// admin/merchant push only fires once per order instead of every tick.
+ensureColumn("orders", "sla_breach_alerted_at", "TEXT");
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS support_tickets (
   id TEXT PRIMARY KEY,
