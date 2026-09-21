@@ -6,18 +6,30 @@ import { useEffect, useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
 import SignOutButton from "@/components/SignOutButton";
 
-export type AdminLink = { href: string; label: string; icon: React.ReactNode };
+export type SidebarLink = { href: string; label: string; icon?: React.ReactNode };
+export type SidebarGroup = { title?: string; links: SidebarLink[] };
 
 /**
- * Dedicated admin navigation. The admin console has a dozen destinations —
- * too many for the shared PortalNav's single scrolling row to stay usable
- * (that component is also used by the merchant and driver portals, which
- * only have a handful of links each, so it isn't touched here). Admin gets
- * its own fixed left sidebar on desktop/tablet, grouped so related sections
- * sit together, and a full-screen slide-out menu on phones instead of a
- * horizontally-scrolling strip.
+ * Shared left-sidebar navigation for every signed-in portal (admin,
+ * merchant, driver). Originally built just for admin — which has a dozen
+ * destinations, too many for a single horizontal row — but the same layout
+ * was rolled out to merchant and driver too so all three portals share one
+ * consistent navigation pattern instead of admin looking different from
+ * the other two. Fixed sidebar on desktop/tablet, full-screen slide-out
+ * menu on phones.
  */
-export default function AdminSidebar({ groups }: { groups: { title: string; links: AdminLink[] }[] }) {
+export default function PortalSidebar({
+  brand,
+  homeHref,
+  groups,
+  headerExtra,
+}: {
+  brand: string;
+  homeHref: string;
+  groups: SidebarGroup[];
+  /** Extra header content, e.g. the driver's online/offline toggle. */
+  headerExtra?: React.ReactNode;
+}) {
   const pathname = usePathname() ?? "";
   const [open, setOpen] = useState(false);
 
@@ -28,11 +40,13 @@ export default function AdminSidebar({ groups }: { groups: { title: string; link
 
   const NavLinks = () => (
     <nav className="flex flex-col gap-5">
-      {groups.map((g) => (
-        <div key={g.title}>
-          <div className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
-            {g.title}
-          </div>
+      {groups.map((g, i) => (
+        <div key={g.title ?? i}>
+          {g.title && (
+            <div className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+              {g.title}
+            </div>
+          )}
           <div className="flex flex-col gap-0.5">
             {g.links.map((l) => {
               const active = isActive(l.href);
@@ -46,7 +60,7 @@ export default function AdminSidebar({ groups }: { groups: { title: string; link
                       : "text-fg-muted hover:bg-fg/5 hover:text-fg"
                   }`}
                 >
-                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">{l.icon}</span>
+                  {l.icon && <span className="flex h-4 w-4 shrink-0 items-center justify-center">{l.icon}</span>}
                   {l.label}
                 </Link>
               );
@@ -70,7 +84,7 @@ export default function AdminSidebar({ groups }: { groups: { title: string; link
             <path d="M3 7h18M3 12h18M3 17h18" />
           </svg>
         </button>
-        <Link href="/admin/dashboard" className="flex shrink-0 items-center gap-2">
+        <Link href={homeHref} className="flex shrink-0 items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent-bright to-accent">
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
               <path d="M3 13.5 10.5 6l4 4L21 3.5" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -79,9 +93,10 @@ export default function AdminSidebar({ groups }: { groups: { title: string; link
             </svg>
           </span>
           <span className="text-[15px] font-semibold tracking-tight text-fg">SwiftDrop</span>
-          <span className="hidden text-[15px] font-medium text-fg-subtle sm:inline">· Admin</span>
+          <span className="hidden text-[15px] font-medium text-fg-subtle sm:inline">· {brand}</span>
         </Link>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {headerExtra}
           <ThemeToggle className="h-8 w-8" />
           <span className="hidden sm:inline">
             <SignOutButton />

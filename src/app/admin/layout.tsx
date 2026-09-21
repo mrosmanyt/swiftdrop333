@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AdminSidebar, { type AdminLink } from "@/components/admin/AdminSidebar";
+import PortalSidebar, { type SidebarLink } from "@/components/portal/PortalSidebar";
 
 /**
  * The admin console is internal-only: it is never linked from the public
@@ -23,7 +23,7 @@ function Icon({ d }: { d: string }) {
 // Twelve destinations, grouped so related sections sit together instead of
 // one long undifferentiated list — this is what actually fixed the "hard to
 // find the right menu" complaint, not just moving links into a sidebar.
-const GROUPS: { title: string; links: AdminLink[] }[] = [
+const GROUPS: { title: string; links: SidebarLink[] }[] = [
   {
     title: "Overview",
     links: [
@@ -61,7 +61,7 @@ const GROUPS: { title: string; links: AdminLink[] }[] = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <AdminSidebar groups={GROUPS} />
+      <PortalSidebar brand="Admin" homeHref="/admin/dashboard" groups={GROUPS} />
       {/* md:ml-56 matches the sidebar's fixed width so content never sits
           underneath it; on phones there's no sidebar to offset. */}
       <main className="px-4 py-8 sm:px-6 md:ml-56">
