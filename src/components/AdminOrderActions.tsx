@@ -56,7 +56,7 @@ export default function AdminOrderActions({
           <select
             value={courierId}
             onChange={(e) => setCourierId(e.target.value)}
-            className="rounded-lg border border-gray-300 p-1.5 text-xs"
+            className="rounded-lg border border-line p-1.5 text-xs"
           >
             {couriers.map((c) => (
               <option key={c.id} value={c.id}>
@@ -67,7 +67,7 @@ export default function AdminOrderActions({
           <button
             disabled={busy || !courierId}
             onClick={() => call("assign", { courierId })}
-            className="rounded-lg bg-brand px-2 py-1 text-xs text-white hover:bg-brand-dark disabled:opacity-50"
+            className="rounded-lg bg-accent-solid px-2 py-1 text-xs text-white hover:opacity-90 disabled:opacity-50"
           >
             Force assign
           </button>
@@ -77,12 +77,12 @@ export default function AdminOrderActions({
         <button
           disabled={busy}
           onClick={() => call("unassign")}
-          className="rounded-lg border border-orange-200 px-2 py-1 text-xs text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+          className="rounded-lg border border-warn/30 px-2 py-1 text-xs text-warn hover:bg-warn-soft disabled:opacity-50"
         >
           Unassign & requeue
         </button>
       )}
-      {error && <span className="text-xs text-red-500">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }

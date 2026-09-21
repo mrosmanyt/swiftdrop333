@@ -27,11 +27,11 @@ export default function AcceptOfferButton({ orderId }: { orderId: string }) {
       <button
         onClick={accept}
         disabled={loading}
-        className="rounded-lg bg-brand px-3 py-1 text-sm text-white hover:bg-brand-dark disabled:opacity-50"
+        className="rounded-lg bg-accent-solid px-3 py-1 text-sm text-white hover:opacity-90 disabled:opacity-50"
       >
         {loading ? "Accepting…" : "Accept"}
       </button>
-      {error && <p className="mt-1 max-w-[160px] text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1 max-w-[160px] text-xs text-danger">{error}</p>}
     </div>
   );
 }

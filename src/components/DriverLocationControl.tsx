@@ -86,24 +86,24 @@ export default function DriverLocationControl() {
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm">
+    <div className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm">
       <button
         onClick={toggleOnline}
         className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-          online ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+          online ? "bg-ok-soft text-ok" : "bg-surface-2 text-fg-muted"
         }`}
       >
         {online ? "● Online" : "○ Offline"}
       </button>
       {online && status === "tracking" && (
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-fg-subtle">
           Sharing location{lastSentAt ? ` · updated ${lastSentAt.toLocaleTimeString()}` : "…"}
         </span>
       )}
       {online && status === "requesting" && (
-        <span className="text-xs text-gray-400">Requesting location permission…</span>
+        <span className="text-xs text-fg-subtle">Requesting location permission…</span>
       )}
-      {status === "error" && <span className="text-xs text-red-500">{errorMsg}</span>}
+      {status === "error" && <span className="text-xs text-danger">{errorMsg}</span>}
     </div>
   );
 }

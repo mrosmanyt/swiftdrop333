@@ -3,98 +3,153 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { getMerchantProfileByUserId, listOrdersForMerchant } from "@/lib/repo";
 import { merchantBlockReason } from "@/lib/guards";
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  Stat,
+  StatusBadge,
+  TableWrap,
+  orderRef,
+} from "@/components/portal/ui";
+
+const ACTIVE = ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"];
 
 export default async function MerchantDashboard() {
   const user = await getSessionUser();
   if (!user || user.role !== "MERCHANT") redirect("/login");
 
   const merchant = getMerchantProfileByUserId(user.id);
-  const orders = merchant ? listOrdersForMerchant(merchant.id, 10) : [];
-  const activeCount = orders.filter((o) => ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"].includes(o!.status)).length;
+  const orders = merchant ? listOrdersForMerchant(merchant.id, 200) : [];
   const blockReason = merchantBlockReason(merchant);
+
+  const recent = orders.slice(0, 8);
+  const activeCount = orders.filter((o) => ACTIVE.includes(o!.status)).length;
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const today = orders.filter((o) => new Date(o!.createdAt) >= startOfToday);
+  const spentTodayCents = today.reduce((sum, o) => sum + (o!.priceCents ?? 0), 0);
+  const deliveredToday = today.filter((o) => o!.status === "DELIVERED").length;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Merchant Dashboard</h1>
-        <p className="text-gray-500">{merchant?.businessName}</p>
-      </div>
-
-      {blockReason && (
-        <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-          <p className="font-medium">
-            {merchant?.kybStatus === "rejected" ? "Verification rejected" : "Verification in progress"}
-          </p>
-          <p className="mt-1">{blockReason}</p>
-          {merchant?.kybNotes && <p className="mt-1 italic">Admin note: {merchant.kybNotes}</p>}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Active deliveries" value={activeCount} />
-        <StatCard label="KYB status" value={merchant?.kybStatus ?? "—"} />
-        <StatCard label="Shopify connected" value={merchant?.shopifyDomain ? "Yes" : "Not yet"} />
-      </div>
-
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-100 p-4">
-          <h2 className="font-semibold">Recent orders</h2>
-          {blockReason ? (
-            <span className="cursor-not-allowed rounded-lg bg-gray-200 px-3 py-1.5 text-sm font-medium text-gray-400">
+      <PageHeader
+        title="Dashboard"
+        subtitle={merchant?.businessName}
+        action={
+          blockReason ? (
+            <span
+              title={blockReason}
+              className="cursor-not-allowed rounded-lg bg-surface-2 px-3.5 py-2 text-[13.5px] font-medium text-fg-subtle"
+            >
               + New delivery
             </span>
           ) : (
             <Link
               href="/merchant/orders/new"
-              className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark"
+              className="rounded-lg bg-accent-solid px-3.5 py-2 text-[13.5px] font-medium text-white transition-opacity hover:opacity-90"
             >
               + New delivery
             </Link>
-          )}
-        </div>
-        <table className="w-full text-left text-sm">
-          <thead className="text-gray-400">
-            <tr>
-              <th className="p-3">Order</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Service</th>
-              <th className="p-3">Price</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => (
-              <tr key={o!.id} className="border-t border-gray-100">
-                <td className="p-3 font-mono text-xs">{o!.id.slice(0, 10)}…</td>
-                <td className="p-3">{o!.status}</td>
-                <td className="p-3">{o!.serviceType}</td>
-                <td className="p-3">${(o!.priceCents / 100).toFixed(2)}</td>
-                <td className="p-3">
-                  <Link href={`/merchant/orders/${o!.id}`} className="text-brand hover:underline">
-                    Track →
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {!orders.length && (
-              <tr>
-                <td className="p-3 text-gray-400" colSpan={5}>
-                  No orders yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+          )
+        }
+      />
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-sm text-gray-400">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
+      {blockReason && (
+        <div className="rounded-2xl border border-warn/30 bg-warn-soft p-4 text-sm text-warn">
+          <p className="font-medium">
+            {merchant?.kybStatus === "rejected" ? "Verification rejected" : "Verification in progress"}
+          </p>
+          <p className="mt-1">{blockReason}</p>
+          {merchant?.kybNotes && <p className="mt-1 italic">Note from our team: {merchant.kybNotes}</p>}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat
+          label="Out for delivery"
+          value={activeCount}
+          tone={activeCount ? "accent" : "default"}
+          href="/merchant/orders"
+        />
+        <Stat label="Booked today" value={today.length} hint={`${deliveredToday} already delivered`} />
+        <Stat label="Spent today" value={`$${(spentTodayCents / 100).toFixed(2)}`} />
+        <Stat
+          label="Verification"
+          value={merchant?.kybStatus ?? "—"}
+          tone={merchant?.kybStatus === "verified" ? "ok" : "warn"}
+        />
+      </div>
+
+      <Card
+        title="Recent deliveries"
+        action={
+          <Link href="/merchant/orders" className="text-[13px] text-accent hover:underline">
+            View all
+          </Link>
+        }
+        bodyClassName=""
+      >
+        {recent.length ? (
+          <TableWrap>
+            <table className="w-full text-left text-sm">
+              <thead className="text-[12.5px] uppercase tracking-wide text-fg-subtle">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2.5 font-medium">Delivery</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium">Service</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Price</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((o) => (
+                  <tr key={o!.id} className="border-b border-line last:border-0 hover:bg-fg/[0.02]">
+                    <td className="px-4 py-3">
+                      {/* The customer and where it's going is what a merchant
+                          recognises; the reference is for phone calls. */}
+                      <p className="font-medium text-fg">{o!.customerName}</p>
+                      <p className="mt-0.5 max-w-[26ch] truncate text-[12.5px] text-fg-subtle sm:max-w-[40ch]">
+                        {orderRef(o!.id)} · {o!.dropoffAddress}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={o!.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-fg-muted">
+                      {o!.serviceType.toLowerCase().replace(/_/g, " ")}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums">
+                      ${(o!.priceCents / 100).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <Link href={`/merchant/orders/${o!.id}`} className="text-accent hover:underline">
+                        {ACTIVE.includes(o!.status) ? "Track" : "Details"} →
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        ) : (
+          <EmptyState
+            title="No deliveries yet"
+            hint="Book your first one and it goes out to nearby couriers within seconds."
+            action={
+              !blockReason && (
+                <Link
+                  href="/merchant/orders/new"
+                  className="inline-block rounded-lg bg-accent-solid px-3.5 py-2 text-[13.5px] font-medium text-white hover:opacity-90"
+                >
+                  Book a delivery
+                </Link>
+              )
+            }
+          />
+        )}
+      </Card>
     </div>
   );
 }

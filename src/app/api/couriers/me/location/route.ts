@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/session";
 import { getCourierProfileByUserId, updateCourierLocation, listActiveOrdersForCourier } from "@/lib/repo";
+import { checkLocationJump } from "@/lib/fraud";
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -29,6 +30,10 @@ export async function POST(req: NextRequest) {
   // route trail can be replayed per-delivery later.
   const active = listActiveOrdersForCourier(courier.id);
   const activeOrderId = active[0]?.id ?? null;
+
+  // GPS spoofing check runs against the previous ping, before this one
+  // overwrites it.
+  checkLocationJump(courier.id, parsed.data.lat, parsed.data.lng);
 
   updateCourierLocation(courier.id, parsed.data.lat, parsed.data.lng, activeOrderId);
   return NextResponse.json({ ok: true });

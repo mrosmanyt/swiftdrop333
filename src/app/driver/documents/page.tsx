@@ -20,7 +20,7 @@ export default async function DriverDocumentsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Your documents</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-fg-muted">
           Upload these so an admin can approve your account. JPG, PNG or PDF, up to 10MB each.
         </p>
       </div>
@@ -60,9 +60,9 @@ export default async function DriverDocumentsPage() {
         )}
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm">
+      <div className="rounded-xl border border-line bg-surface p-4 text-sm">
         <p className="font-medium">Application details</p>
-        <dl className="mt-2 space-y-1 text-gray-500">
+        <dl className="mt-2 space-y-1 text-fg-muted">
           <Row label="Name" value={courier.fullName ?? "—"} />
           <Row label="Phone" value={courier.phone ?? "—"} />
           <Row label="Vehicle" value={courier.vehicleType} />
@@ -75,9 +75,9 @@ export default async function DriverDocumentsPage() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between border-b border-gray-50 py-1">
+    <div className="flex justify-between border-b border-line/60 py-1">
       <dt>{label}</dt>
-      <dd className="text-gray-700">{value}</dd>
+      <dd className="text-fg-muted">{value}</dd>
     </div>
   );
 }
@@ -93,14 +93,14 @@ function StatusBanner({
 }) {
   if (status === "approved") {
     return (
-      <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+      <div className="rounded-xl border border-ok/30 bg-ok-soft p-4 text-sm text-ok">
         <p className="font-medium">You&apos;re approved ✓</p>
         <p className="mt-1">Head to Offers, go online, and start accepting deliveries.</p>
       </div>
     );
   }
   return (
-    <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+    <div className="rounded-xl border border-warn/30 bg-warn-soft p-4 text-sm text-warn">
       <p className="font-medium">
         {status === "rejected" ? "Application rejected" : "Application under review"}
       </p>

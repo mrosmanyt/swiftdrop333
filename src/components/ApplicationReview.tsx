@@ -49,26 +49,26 @@ export default function ApplicationReview({ kind, id, title, subtitle, details, 
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex items-start justify-between">
         <div>
           <p className="font-semibold">{title}</p>
-          <p className="text-sm text-gray-500">{subtitle}</p>
+          <p className="text-sm text-fg-muted">{subtitle}</p>
         </div>
-        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">pending</span>
+        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-xs text-warn">pending</span>
       </div>
 
       <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
         {details.map((d) => (
-          <div key={d.label} className="flex justify-between border-b border-gray-50 py-1">
-            <dt className="text-gray-400">{d.label}</dt>
-            <dd className="text-gray-700">{d.value}</dd>
+          <div key={d.label} className="flex justify-between border-b border-line/60 py-1">
+            <dt className="text-fg-subtle">{d.label}</dt>
+            <dd className="text-fg-muted">{d.value}</dd>
           </div>
         ))}
       </dl>
 
       <div className="mt-3">
-        <p className="text-xs font-medium text-gray-500">Documents</p>
+        <p className="text-xs font-medium text-fg-muted">Documents</p>
         {documents.length ? (
           <ul className="mt-1 space-y-1 text-sm">
             {documents.map((d) => (
@@ -77,7 +77,7 @@ export default function ApplicationReview({ kind, id, title, subtitle, details, 
                   href={`/api/admin/documents/${d.id}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-brand hover:underline"
+                  className="text-accent hover:underline"
                 >
                   {d.docType.replace(/_/g, " ")} — {d.originalName ?? "view"}
                 </a>
@@ -85,7 +85,7 @@ export default function ApplicationReview({ kind, id, title, subtitle, details, 
             ))}
           </ul>
         ) : (
-          <p className="mt-1 text-sm text-gray-400">No documents uploaded yet.</p>
+          <p className="mt-1 text-sm text-fg-subtle">No documents uploaded yet.</p>
         )}
       </div>
 
@@ -94,24 +94,24 @@ export default function ApplicationReview({ kind, id, title, subtitle, details, 
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Note (shown to the applicant)"
-          className="flex-1 rounded-lg border border-gray-300 p-2 text-sm"
+          className="flex-1 rounded-lg border border-line p-2 text-sm"
         />
         <button
           disabled={busy}
           onClick={() => decide("approve")}
-          className="rounded-lg bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
+          className="rounded-lg bg-ok-solid px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
         >
           Approve
         </button>
         <button
           disabled={busy}
           onClick={() => decide("reject")}
-          className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+          className="rounded-lg border border-danger/30 px-3 py-2 text-sm text-danger hover:bg-danger-soft disabled:opacity-50"
         >
           Reject
         </button>
       </div>
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
     </div>
   );
 }

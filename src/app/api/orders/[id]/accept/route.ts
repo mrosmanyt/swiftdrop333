@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/session";
-import { acceptOrder, canCourierAcceptOrder, getCourierProfileByUserId } from "@/lib/repo";
+import {
+  acceptOrder,
+  canCourierAcceptOrder,
+  getCourierProfileByUserId,
+  getOrderById,
+} from "@/lib/repo";
+import { notifyCourierAssigned } from "@/lib/notify";
 import { courierBlockReason } from "@/lib/guards";
 import { NextRequest } from "next/server";
 
@@ -29,5 +35,9 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       { status: 409 }
     );
   }
+
+  const order = getOrderById(params.id);
+  if (order) await notifyCourierAssigned(order as any);
+
   return NextResponse.json({ ok: true });
 }

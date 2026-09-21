@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/session";
-import { markOrderReturning, getCourierProfileByUserId } from "@/lib/repo";
+import {
+  markOrderReturning,
+  getCourierProfileByUserId,
+  getOrderById,
+  getMerchantProfileById,
+  findUserById,
+} from "@/lib/repo";
+import { notifyReturning } from "@/lib/notify";
+import { checkCancelRate } from "@/lib/fraud";
 
 const schema = z.object({ reason: z.string().min(1).max(500) });
 
@@ -23,5 +31,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const ok = markOrderReturning(params.id, courier.id, parsed.data.reason);
   if (!ok) return NextResponse.json({ error: "Order not found or not in a returnable state" }, { status: 404 });
+
+  // The merchant needs to know their parcel is coming back, and why.
+  // Repeated failures are a trust signal worth reviewing.
+  checkCancelRate(courier.id);
+
+  const order = getOrderById(params.id);
+  if (order) {
+    const merchant = getMerchantProfileById(order.merchantId);
+    const merchantUser = merchant ? findUserById(merchant.userId) : null;
+    await notifyReturning(order as any, merchantUser?.email ?? null, parsed.data.reason);
+  }
+
   return NextResponse.json({ ok: true });
 }

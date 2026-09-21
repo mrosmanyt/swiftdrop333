@@ -38,7 +38,7 @@ export default function NewZoneForm() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark"
+        className="rounded-lg bg-accent-solid px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
       >
         + New zone
       </button>
@@ -48,7 +48,7 @@ export default function NewZoneForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-wrap items-end gap-2 rounded-xl border border-gray-200 bg-white p-3"
+      className="flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface p-3"
     >
       <Field name="city" label="City" placeholder="Toronto" />
       <Field name="name" label="Zone name" placeholder="Downtown Core" />
@@ -57,14 +57,14 @@ export default function NewZoneForm() {
       <button
         type="submit"
         disabled={busy}
-        className="rounded-lg bg-brand px-3 py-2 text-sm text-white hover:bg-brand-dark disabled:opacity-50"
+        className="rounded-lg bg-accent-solid px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
       >
         {busy ? "Saving…" : "Save"}
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-sm text-gray-500">
+      <button type="button" onClick={() => setOpen(false)} className="text-sm text-fg-muted">
         Cancel
       </button>
-      {error && <p className="w-full text-xs text-red-500">{error}</p>}
+      {error && <p className="w-full text-xs text-danger">{error}</p>}
     </form>
   );
 }
@@ -83,7 +83,7 @@ function Field({
   step?: string;
 }) {
   return (
-    <label className="text-xs text-gray-500">
+    <label className="text-xs text-fg-muted">
       {label}
       <input
         name={name}
@@ -91,7 +91,7 @@ function Field({
         step={step}
         placeholder={placeholder}
         required
-        className="mt-1 block w-32 rounded-lg border border-gray-300 p-1.5 text-sm text-gray-900"
+        className="mt-1 block w-32 rounded-lg border border-line p-1.5 text-sm text-fg"
       />
     </label>
   );

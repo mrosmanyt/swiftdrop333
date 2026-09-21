@@ -51,3 +51,4 @@ website-*.png
 # scaffold/duplicate directories
 /swiftdrop/
 /swiftdrop-scaffold/
+/swiftdrop-extracted/

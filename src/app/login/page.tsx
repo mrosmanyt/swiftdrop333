@@ -1,94 +1,94 @@
 "use client";
 
-import { signIn, getSession } from "next-auth/react";
+import Link from "next/link";
+import { signIn } from "next-auth/react";
 import { useState } from "react";
+import AuthShell from "@/components/AuthShell";
 
+/**
+ * Single sign-in page shared by all 3 internal roles — the credentials
+ * provider checks the user's role and the middleware routes them.
+ *
+ * Seeded test accounts (npm run seed), all password "password123":
+ *   merchant@example.com · courier@example.com
+ */
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setBusy(true);
     setError(null);
-    setLoading(true);
-
     const form = new FormData(e.currentTarget);
-    const email = form.get("email") as string;
-    const password = form.get("password") as string;
 
-    try {
-      const res = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
+    const res = await signIn("credentials", {
+      email: form.get("email"),
+      password: form.get("password"),
+      redirect: false,
+    });
+    setBusy(false);
 
-      if (res?.error) {
-        setError("Invalid email or password.");
-        setLoading(false);
-        return;
-      }
-
-      // Fetch updated session to check user role and redirect to correct portal
-      const session = await getSession();
-      const role = (session?.user as any)?.role;
-
-      if (role === "ADMIN") {
-        window.location.href = "/admin/dashboard";
-      } else if (role === "MERCHANT") {
-        window.location.href = "/merchant/dashboard";
-      } else if (role === "COURIER") {
-        window.location.href = "/driver/offers";
-      } else {
-        window.location.href = "/";
-      }
-    } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred.");
-      setLoading(false);
+    if (res?.error) {
+      setError("Invalid email or password.");
+      return;
     }
+    window.location.href = "/";
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <h1 className="mb-6 text-2xl font-bold text-brand">Sign in to SwiftDrop</h1>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to your merchant or courier account."
+      footer={
+        <>
+          New here?{" "}
+          <Link href="/signup" className="text-accent hover:underline">
+            Create an account
+          </Link>
+        </>
+      }
+    >
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+        <label className="block text-sm text-fg-muted">
+          Email
           <input
             name="email"
             type="email"
-            placeholder="Email"
-            defaultValue="cenemtech@gmail.com"
             required
-            className="w-full rounded-lg border border-gray-300 p-2 text-black text-sm focus:outline-none focus:border-brand"
+            autoComplete="email"
+            className="mt-1 w-full rounded-lg border border-line bg-bg p-2.5 text-fg outline-none transition focus:border-accent"
           />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1">Password</label>
+        </label>
+        <label className="block text-sm text-fg-muted">
+          Password
           <input
             name="password"
             type="password"
-            placeholder="Password"
-            defaultValue="Malik786@"
             required
-            className="w-full rounded-lg border border-gray-300 p-2 text-black text-sm focus:outline-none focus:border-brand"
+            autoComplete="current-password"
+            className="mt-1 w-full rounded-lg border border-line bg-bg p-2.5 text-fg outline-none transition focus:border-accent"
           />
-        </div>
+        </label>
+
         <button
           type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-brand py-2.5 font-medium text-white hover:bg-brand-dark transition disabled:opacity-50 mt-2"
+          disabled={busy}
+          className="w-full rounded-lg bg-inverse py-2.5 font-medium text-inverse-fg transition hover:opacity-90 disabled:opacity-50"
         >
-          {loading ? "Signing in..." : "Sign in"}
+          {busy ? "Signing in…" : "Sign in"}
         </button>
-        {error && <p className="text-sm font-medium text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-500">{error}</p>}
       </form>
 
-      <div className="mt-6 rounded-lg bg-gray-50 p-3 text-xs text-gray-600 border border-gray-200">
-        <p className="font-semibold text-gray-800 mb-1">Admin Account Details:</p>
-        <p>Email: <code className="text-brand font-mono font-semibold">cenemtech@gmail.com</code></p>
-        <p>Password: <code className="text-brand font-mono font-semibold">Malik786@</code></p>
-      </div>
-    </main>
+      {/* Demo credentials are a development convenience only — they are
+          never rendered in a production build. */}
+      {process.env.NODE_ENV !== "production" && (
+        <p className="mt-5 border-t border-line pt-4 text-xs leading-relaxed text-fg-subtle">
+          Dev accounts — merchant@example.com · courier@example.com
+          (password: password123)
+        </p>
+      )}
+    </AuthShell>
   );
 }

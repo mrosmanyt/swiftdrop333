@@ -2,14 +2,16 @@
   "name": "swiftdrop",
   "version": "0.1.0",
   "private": true,
-  "description": "SwiftDrop — 4-sided local delivery platform (Merchant, Driver, Customer, Admin) for Canada, with a real embedded database and live GPS tracking.",
+  "description": "SwiftDrop \u2014 4-sided local delivery platform (Merchant, Driver, Customer, Admin) for Canada, with a real embedded database and live GPS tracking.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx scripts/seed.ts",
-    "db:reset": "rm -rf data && npm run seed"
+    "db:reset": "node -e \"require('fs').rmSync('data',{recursive:true,force:true})\" && npm run seed",
+    "setup": "node scripts/setup.mjs",
+    "create-admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "next": "^14.2.5",

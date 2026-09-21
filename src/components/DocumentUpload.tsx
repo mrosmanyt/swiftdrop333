@@ -37,21 +37,21 @@ export default function DocumentUpload({ docType, label, hint, existing }: Props
   const uploaded = done || !!existing;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="font-medium">{label}</p>
-          {hint && <p className="text-xs text-gray-400">{hint}</p>}
+          {hint && <p className="text-xs text-fg-subtle">{hint}</p>}
           {existing && (
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-fg-muted">
               {existing.originalName} ·{" "}
               <span
                 className={
                   existing.status === "accepted"
-                    ? "text-green-600"
+                    ? "text-ok"
                     : existing.status === "rejected"
-                    ? "text-red-600"
-                    : "text-yellow-600"
+                    ? "text-danger"
+                    : "text-warn"
                 }
               >
                 {existing.status}
@@ -59,7 +59,7 @@ export default function DocumentUpload({ docType, label, hint, existing }: Props
             </p>
           )}
         </div>
-        <span className={`text-xl ${uploaded ? "text-green-500" : "text-gray-300"}`}>
+        <span className={`text-xl ${uploaded ? "text-ok" : "text-fg-subtle"}`}>
           {uploaded ? "✓" : "○"}
         </span>
       </div>
@@ -74,8 +74,8 @@ export default function DocumentUpload({ docType, label, hint, existing }: Props
         }}
         className="mt-3 text-xs"
       />
-      {busy && <p className="mt-1 text-xs text-gray-400">Uploading…</p>}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {busy && <p className="mt-1 text-xs text-fg-subtle">Uploading…</p>}
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
     </div>
   );
 }

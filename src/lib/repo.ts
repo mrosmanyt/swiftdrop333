@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { computeCourierTier } from "@/lib/pricing";
 
 /**
  * Data-access layer — every API route and page in the app goes through
@@ -202,6 +203,7 @@ function mapMerchant(r: any) {
     website: r.website ?? null,
     kybStatus: r.kyb_status,
     kybNotes: r.kyb_notes ?? null,
+    rating: r.rating ?? 5,
     reviewedAt: r.reviewed_at ?? null,
     payoutMethod: r.payout_method,
     shopifyDomain: r.shopify_domain,
@@ -320,6 +322,8 @@ function mapCourier(r: any) {
     tier: r.tier as CourierTier,
     rating: r.rating,
     isOnline: !!r.is_online,
+    hasInsulatedBag: !!r.has_insulated_bag,
+    locale: r.locale ?? "en",
     lastLat: r.last_lat,
     lastLng: r.last_lng,
     lastLocationAt: r.last_location_at,
@@ -449,6 +453,22 @@ export function setCourierTier(courierId: string, tier: CourierTier) {
 }
 
 /**
+ * Recompute a courier's Courier+ tier from their last 14 days and store it.
+ *
+ * The tier is denormalised onto courier_profiles because dispatch ranks
+ * candidates by it on every offer and can't afford a 14-day aggregate per
+ * courier per order. It therefore has to be refreshed whenever a delivery
+ * closes — otherwise a courier who has clearly earned SILVER keeps the
+ * STARTER row, loses the per-delivery bonus, and gets ranked below couriers
+ * they should be ahead of.
+ */
+export function refreshCourierTier(courierId: string): CourierTier {
+  const tier = computeCourierTier(computeCourierStats14d(courierId));
+  setCourierTier(courierId, tier);
+  return tier;
+}
+
+/**
  * Live location tracking — called every few seconds from the driver app
  * while the courier is online (see components/LocationBroadcaster.tsx).
  * Also appends a breadcrumb ping (courier_location_pings) so an order's
@@ -530,6 +550,8 @@ function mapZone(r: any) {
     baseRateCents: r.base_rate_cents,
     perKmCents: r.per_km_cents,
     isActive: !!r.is_active,
+    surgeMultiplier: r.surge_multiplier ?? 1,
+    surgeNote: r.surge_note ?? null,
     createdAt: r.created_at,
   };
 }
@@ -598,6 +620,17 @@ function mapOrder(r: any) {
     dispatchMode: r.dispatch_mode ?? "auto",
     failureReason: r.failure_reason ?? null,
     returnedAt: r.returned_at ?? null,
+    arrivedAtPickup: r.arrived_at_pickup ?? null,
+    merchantRating: r.merchant_rating ?? null,
+    merchantRatingComment: r.merchant_rating_comment ?? null,
+    batchId: r.batch_id ?? null,
+    batchSequence: r.batch_sequence ?? null,
+    surgeMultiplier: r.surge_multiplier ?? 1,
+    source: r.source ?? "portal",
+    requiresAgeVerification: !!r.requires_age_verification,
+    ageVerifiedAt: r.age_verified_at ?? null,
+    ageVerificationMethod: r.age_verification_method ?? null,
+    temperatureRequirement: r.temperature_requirement ?? "ambient",
     createdAt: r.created_at,
     assignedAt: r.assigned_at,
     pickedUpAt: r.picked_up_at,
@@ -698,6 +731,8 @@ export function createOrder(input: {
   distanceKm?: number | null;
   distanceSource?: string | null;
   etaMinutes?: number | null;
+  requiresAgeVerification?: boolean;
+  temperatureRequirement?: string | null;
 }) {
   const orderId = id();
   db.prepare(
@@ -734,6 +769,17 @@ export function createOrder(input: {
     input.distanceSource ?? null,
     input.etaMinutes ?? null
   );
+
+  if (input.requiresAgeVerification || input.temperatureRequirement) {
+    db.prepare(
+      `UPDATE orders SET requires_age_verification = ?, temperature_requirement = ? WHERE id = ?`
+    ).run(
+      input.requiresAgeVerification ? 1 : 0,
+      input.temperatureRequirement ?? "ambient",
+      orderId
+    );
+  }
+
   logEvent(orderId, "order_created", { status: "PENDING" });
   return orderId;
 }
@@ -792,7 +838,10 @@ export function markOrderDelivered(orderId: string, courierId: string, proofUrl:
       `UPDATE orders SET status = 'DELIVERED', delivered_at = ?, proof_of_delivery_url = ? WHERE id = ? AND courier_id = ?`
     )
     .run(now(), proofUrl, orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "status_change", { status: "DELIVERED" });
+  if (result.changes > 0) {
+    logEvent(orderId, "status_change", { status: "DELIVERED" });
+    refreshCourierTier(courierId);
+  }
   return result.changes > 0;
 }
 
@@ -800,7 +849,11 @@ export function markOrderFailed(orderId: string, courierId: string, reason: stri
   const result = db
     .prepare(`UPDATE orders SET status = 'FAILED' WHERE id = ? AND courier_id = ?`)
     .run(orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "status_change", { status: "FAILED", reason });
+  if (result.changes > 0) {
+    logEvent(orderId, "status_change", { status: "FAILED", reason });
+    // A failed drop moves the completion rate, which can move the tier too.
+    refreshCourierTier(courierId);
+  }
   return result.changes > 0;
 }
 
@@ -865,9 +918,14 @@ export function getActiveOfferForOrder(orderId: string) {
 export function listActiveOffersForCourier(courierId: string) {
   return db
     .prepare(
-      `SELECT o.*, f.id as offer_id, f.expires_at as offer_expires_at
+      // Joins zones/merchant the same way ORDER_SELECT does, so a targeted
+      // offer shows the zone name just like a broadcast one.
+      `SELECT o.*, z.name as zone_name, m.business_name as merchant_business_name,
+              f.id as offer_id, f.expires_at as offer_expires_at
        FROM offers f
        JOIN orders o ON o.id = f.order_id
+       LEFT JOIN zones z ON z.id = o.zone_id
+       LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
        WHERE f.courier_id = ? AND f.status = 'offered' AND f.expires_at >= ? AND o.status = 'PENDING'
        ORDER BY f.created_at ASC`
     )
@@ -1042,6 +1100,880 @@ export function adminUnassignOrder(orderId: string, adminUserId: string) {
   return result.changes > 0;
 }
 
+// ---------------------------------------------------------------------------
+// Messages — one thread per order (customer ↔ courier, merchant can see it)
+// ---------------------------------------------------------------------------
+
+export function addMessage(input: {
+  orderId: string;
+  senderRole: "customer" | "courier" | "merchant" | "admin";
+  senderUserId?: string | null;
+  body: string;
+}) {
+  const messageId = id();
+  db.prepare(
+    `INSERT INTO messages (id, order_id, sender_role, sender_user_id, body, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(messageId, input.orderId, input.senderRole, input.senderUserId ?? null, input.body, now());
+  return messageId;
+}
+
+export function listMessages(orderId: string) {
+  return db
+    .prepare(
+      `SELECT id, order_id as orderId, sender_role as senderRole, body, created_at as createdAt
+       FROM messages WHERE order_id = ? ORDER BY created_at ASC LIMIT 500`
+    )
+    .all(orderId)
+    .map(toPlain) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// Notifications log
+// ---------------------------------------------------------------------------
+
+export function listNotifications(limit = 100) {
+  return db
+    .prepare(
+      `SELECT n.*, o.customer_name as customerName FROM notifications n
+       LEFT JOIN orders o ON o.id = n.order_id
+       ORDER BY n.created_at DESC LIMIT ?`
+    )
+    .all(limit)
+    .map(toPlain) as any[];
+}
+
+export function listNotificationsForOrder(orderId: string) {
+  return db
+    .prepare(`SELECT * FROM notifications WHERE order_id = ? ORDER BY created_at DESC`)
+    .all(orderId)
+    .map(toPlain) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// Two-way ratings — the courier rates the merchant on pickup experience
+// ---------------------------------------------------------------------------
+
+/** Courier taps "I'm at the pickup" — this timestamp is what makes the
+ *  merchant's pickup wait time measurable. */
+export function markArrivedAtPickup(orderId: string, courierId: string) {
+  const result = db
+    .prepare(
+      `UPDATE orders SET arrived_at_pickup = ? WHERE id = ? AND courier_id = ? AND arrived_at_pickup IS NULL`
+    )
+    .run(now(), orderId, courierId);
+  if (result.changes > 0) logEvent(orderId, "arrived_at_pickup", {});
+  return result.changes > 0;
+}
+
+export function submitMerchantRating(
+  orderId: string,
+  courierId: string,
+  rating: number,
+  comment?: string
+) {
+  const result = db
+    .prepare(
+      `UPDATE orders SET merchant_rating = ?, merchant_rating_comment = ?
+       WHERE id = ? AND courier_id = ? AND merchant_rating IS NULL
+         AND status IN ('PICKED_UP','IN_TRANSIT','DELIVERED','RETURNING','RETURNED')`
+    )
+    .run(rating, comment ?? null, orderId, courierId);
+
+  if (result.changes > 0) {
+    const order = getOrderById(orderId);
+    if (order?.merchantId) {
+      const agg = db
+        .prepare(
+          `SELECT AVG(merchant_rating) as avg FROM orders WHERE merchant_id = ? AND merchant_rating IS NOT NULL`
+        )
+        .get(order.merchantId) as any;
+      if (agg?.avg) {
+        db.prepare(`UPDATE merchant_profiles SET rating = ? WHERE id = ?`).run(
+          Math.round(agg.avg * 10) / 10,
+          order.merchantId
+        );
+      }
+    }
+    logEvent(orderId, "merchant_rated", { rating, comment });
+  }
+  return result.changes > 0;
+}
+
+/**
+ * Merchant pickup performance — average wait between the courier arriving
+ * and the parcel actually being handed over. This is the number that tells
+ * you which merchants are quietly costing you courier hours.
+ */
+export function merchantPickupStats(merchantId: string) {
+  const row = db
+    .prepare(
+      `SELECT
+         COUNT(*) as samples,
+         AVG((julianday(picked_up_at) - julianday(arrived_at_pickup)) * 24 * 60) as avgWaitMinutes
+       FROM orders
+       WHERE merchant_id = ? AND arrived_at_pickup IS NOT NULL AND picked_up_at IS NOT NULL`
+    )
+    .get(merchantId) as any;
+  return {
+    samples: row?.samples ?? 0,
+    avgWaitMinutes: row?.avgWaitMinutes ? Math.round(row.avgWaitMinutes * 10) / 10 : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Batches (multi-stop routes)
+// ---------------------------------------------------------------------------
+
+export function createBatch(input: {
+  zoneId: string;
+  orderIds: string[];
+  totalKm: number;
+  totalCourierFeeCents: number;
+}) {
+  const batchId = id();
+  db.prepare(
+    `INSERT INTO batches (id, zone_id, status, stop_count, total_km, total_courier_fee_cents, created_at)
+     VALUES (?, ?, 'open', ?, ?, ?, ?)`
+  ).run(batchId, input.zoneId, input.orderIds.length, input.totalKm, input.totalCourierFeeCents, now());
+
+  input.orderIds.forEach((orderId, index) => {
+    db.prepare(`UPDATE orders SET batch_id = ?, batch_sequence = ? WHERE id = ?`).run(
+      batchId,
+      index + 1,
+      orderId
+    );
+    logEvent(orderId, "batched", { batchId, sequence: index + 1 });
+  });
+
+  return batchId;
+}
+
+export function getBatchById(batchId: string) {
+  const r = db.prepare(`SELECT * FROM batches WHERE id = ?`).get(batchId) as any;
+  if (!r) return null;
+  return {
+    id: r.id,
+    courierId: r.courier_id,
+    zoneId: r.zone_id,
+    status: r.status,
+    stopCount: r.stop_count,
+    totalKm: r.total_km,
+    totalCourierFeeCents: r.total_courier_fee_cents,
+    createdAt: r.created_at,
+    assignedAt: r.assigned_at,
+  };
+}
+
+export function listOpenBatches() {
+  return db
+    .prepare(`SELECT * FROM batches WHERE status = 'open' ORDER BY created_at ASC`)
+    .all()
+    .map(toPlain) as any[];
+}
+
+export function listOrdersInBatch(batchId: string) {
+  return db
+    .prepare(`${ORDER_SELECT} WHERE o.batch_id = ? ORDER BY o.batch_sequence ASC`)
+    .all(batchId)
+    .map(mapOrder);
+}
+
+/** Courier takes an entire multi-stop route in one tap. */
+export function assignBatchToCourier(batchId: string, courierId: string) {
+  const result = db
+    .prepare(`UPDATE batches SET courier_id = ?, status = 'assigned', assigned_at = ? WHERE id = ? AND status = 'open'`)
+    .run(courierId, now(), batchId);
+  if (result.changes === 0) return false;
+
+  const orders = listOrdersInBatch(batchId);
+  for (const o of orders) {
+    if (o!.status === "PENDING") {
+      db.prepare(
+        `UPDATE orders SET courier_id = ?, status = 'ASSIGNED', assigned_at = ? WHERE id = ? AND status = 'PENDING'`
+      ).run(courierId, now(), o!.id);
+      markOffersResolvedForOrder(o!.id, courierId);
+      logEvent(o!.id, "courier_assigned", { courierId, viaBatch: batchId });
+    }
+  }
+  return true;
+}
+
+/** Pending, un-batched orders — the input to the batching pass. */
+export function listBatchableOrders(limit = 100) {
+  return db
+    .prepare(
+      `${ORDER_SELECT}
+       WHERE o.status = 'PENDING' AND o.courier_id IS NULL AND o.batch_id IS NULL
+         AND o.service_type IN ('BATCH','NEXT_DAY')
+       ORDER BY o.created_at ASC LIMIT ?`
+    )
+    .all(limit)
+    .map(mapOrder);
+}
+
+// ---------------------------------------------------------------------------
+// Surge pricing
+// ---------------------------------------------------------------------------
+
+export function setZoneSurge(zoneId: string, multiplier: number, note: string | null, adminUserId: string) {
+  db.prepare(`UPDATE zones SET surge_multiplier = ?, surge_note = ? WHERE id = ?`).run(
+    multiplier,
+    note,
+    zoneId
+  );
+  writeAudit(adminUserId, "zone_surge_set", "zone", zoneId, `x${multiplier} ${note ?? ""}`);
+}
+
+// ---------------------------------------------------------------------------
+// Merchant API keys + webhooks
+// ---------------------------------------------------------------------------
+
+export function createApiKey(input: {
+  merchantId: string;
+  name: string;
+  keyPrefix: string;
+  keyHash: string;
+  webhookUrl?: string | null;
+}) {
+  const keyId = id();
+  db.prepare(
+    `INSERT INTO api_keys (id, merchant_id, name, key_prefix, key_hash, webhook_url, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(keyId, input.merchantId, input.name, input.keyPrefix, input.keyHash, input.webhookUrl ?? null, now());
+  return keyId;
+}
+
+export function listApiKeys(merchantId: string) {
+  return db
+    .prepare(
+      `SELECT id, name, key_prefix as keyPrefix, webhook_url as webhookUrl,
+              last_used_at as lastUsedAt, revoked_at as revokedAt, created_at as createdAt
+       FROM api_keys WHERE merchant_id = ? ORDER BY created_at DESC`
+    )
+    .all(merchantId)
+    .map(toPlain) as any[];
+}
+
+export function findApiKeyByHash(keyHash: string) {
+  const r = db
+    .prepare(`SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL`)
+    .get(keyHash) as any;
+  return r ? toPlain(r) : null;
+}
+
+export function touchApiKey(keyId: string) {
+  db.prepare(`UPDATE api_keys SET last_used_at = ? WHERE id = ?`).run(now(), keyId);
+}
+
+export function revokeApiKey(keyId: string, merchantId: string) {
+  const result = db
+    .prepare(`UPDATE api_keys SET revoked_at = ? WHERE id = ? AND merchant_id = ? AND revoked_at IS NULL`)
+    .run(now(), keyId, merchantId);
+  return result.changes > 0;
+}
+
+export function setWebhookUrl(keyId: string, merchantId: string, url: string | null) {
+  db.prepare(`UPDATE api_keys SET webhook_url = ? WHERE id = ? AND merchant_id = ?`).run(
+    url,
+    keyId,
+    merchantId
+  );
+}
+
+export function webhookUrlsForMerchant(merchantId: string): string[] {
+  return (
+    db
+      .prepare(
+        `SELECT DISTINCT webhook_url FROM api_keys
+         WHERE merchant_id = ? AND revoked_at IS NULL AND webhook_url IS NOT NULL`
+      )
+      .all(merchantId) as any[]
+  ).map((r) => r.webhook_url);
+}
+
+export function recordWebhookDelivery(input: {
+  merchantId: string;
+  orderId?: string | null;
+  event: string;
+  url: string;
+  status: string;
+  responseCode?: number | null;
+  error?: string | null;
+}) {
+  db.prepare(
+    `INSERT INTO webhook_deliveries (id, merchant_id, order_id, event, url, status, response_code, error, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id(),
+    input.merchantId,
+    input.orderId ?? null,
+    input.event,
+    input.url,
+    input.status,
+    input.responseCode ?? null,
+    input.error ?? null,
+    now()
+  );
+}
+
+export function listWebhookDeliveries(merchantId: string, limit = 50) {
+  return db
+    .prepare(`SELECT * FROM webhook_deliveries WHERE merchant_id = ? ORDER BY created_at DESC LIMIT ?`)
+    .all(merchantId, limit)
+    .map(toPlain) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// Recurring deliveries
+// ---------------------------------------------------------------------------
+
+export function createRecurringOrder(input: any) {
+  const recurringId = id();
+  db.prepare(
+    `INSERT INTO recurring_orders
+      (id, merchant_id, zone_id, label, pickup_address, pickup_lat, pickup_lng,
+       dropoff_address, dropoff_lat, dropoff_lng, customer_name, customer_phone,
+       customer_email, delivery_instructions, service_type, days_of_week,
+       window_hour_start, window_hour_end, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
+  ).run(
+    recurringId,
+    input.merchantId,
+    input.zoneId,
+    input.label,
+    input.pickupAddress,
+    input.pickupLat ?? null,
+    input.pickupLng ?? null,
+    input.dropoffAddress,
+    input.dropoffLat ?? null,
+    input.dropoffLng ?? null,
+    input.customerName,
+    input.customerPhone ?? null,
+    input.customerEmail ?? null,
+    input.deliveryInstructions ?? null,
+    input.serviceType ?? "SAME_DAY",
+    input.daysOfWeek,
+    input.windowHourStart ?? null,
+    input.windowHourEnd ?? null,
+    now()
+  );
+  return recurringId;
+}
+
+export function listRecurringOrders(merchantId: string) {
+  return db
+    .prepare(`SELECT * FROM recurring_orders WHERE merchant_id = ? ORDER BY created_at DESC`)
+    .all(merchantId)
+    .map(toPlain) as any[];
+}
+
+export function listActiveRecurringOrders() {
+  return db.prepare(`SELECT * FROM recurring_orders WHERE active = 1`).all().map(toPlain) as any[];
+}
+
+export function setRecurringActive(recurringId: string, merchantId: string, active: boolean) {
+  const result = db
+    .prepare(`UPDATE recurring_orders SET active = ? WHERE id = ? AND merchant_id = ?`)
+    .run(active ? 1 : 0, recurringId, merchantId);
+  return result.changes > 0;
+}
+
+export function markRecurringGenerated(recurringId: string, dateStr: string) {
+  db.prepare(`UPDATE recurring_orders SET last_generated_date = ? WHERE id = ?`).run(dateStr, recurringId);
+}
+
+// ---------------------------------------------------------------------------
+// Challenges (courier bonus campaigns)
+// ---------------------------------------------------------------------------
+
+export function createChallenge(input: {
+  title: string;
+  description?: string;
+  targetDeliveries: number;
+  bonusCents: number;
+  startsAt: string;
+  endsAt: string;
+  minTier?: string;
+}) {
+  const challengeId = id();
+  db.prepare(
+    `INSERT INTO challenges (id, title, description, target_deliveries, bonus_cents, starts_at, ends_at, min_tier, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
+  ).run(
+    challengeId,
+    input.title,
+    input.description ?? null,
+    input.targetDeliveries,
+    input.bonusCents,
+    input.startsAt,
+    input.endsAt,
+    input.minTier ?? "STARTER",
+    now()
+  );
+  return challengeId;
+}
+
+export function listActiveChallenges() {
+  return db
+    .prepare(`SELECT * FROM challenges WHERE active = 1 AND ends_at >= ? ORDER BY ends_at ASC`)
+    .all(now())
+    .map(toPlain) as any[];
+}
+
+export function listAllChallenges() {
+  return db.prepare(`SELECT * FROM challenges ORDER BY created_at DESC`).all().map(toPlain) as any[];
+}
+
+/** How many deliveries a courier completed inside a challenge window. */
+export function courierDeliveriesBetween(courierId: string, startsAt: string, endsAt: string) {
+  const r = db
+    .prepare(
+      `SELECT COUNT(*) as c FROM orders
+       WHERE courier_id = ? AND status = 'DELIVERED' AND delivered_at >= ? AND delivered_at <= ?`
+    )
+    .get(courierId, startsAt, endsAt) as any;
+  return r?.c ?? 0;
+}
+
+export function hasClaimedChallenge(challengeId: string, courierId: string) {
+  return !!db
+    .prepare(`SELECT 1 FROM challenge_claims WHERE challenge_id = ? AND courier_id = ?`)
+    .get(challengeId, courierId);
+}
+
+export function claimChallenge(challengeId: string, courierId: string, bonusCents: number) {
+  try {
+    db.prepare(
+      `INSERT INTO challenge_claims (id, challenge_id, courier_id, bonus_cents, claimed_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(id(), challengeId, courierId, bonusCents, now());
+    db.prepare(`UPDATE courier_profiles SET payout_balance_cents = payout_balance_cents + ? WHERE id = ?`).run(
+      bonusCents,
+      courierId
+    );
+    return true;
+  } catch {
+    return false; // unique index — already claimed
+  }
+}
+
+export function listChallengeClaims(courierId: string) {
+  return db
+    .prepare(
+      `SELECT c.title, cc.bonus_cents as bonusCents, cc.claimed_at as claimedAt
+       FROM challenge_claims cc JOIN challenges c ON c.id = cc.challenge_id
+       WHERE cc.courier_id = ? ORDER BY cc.claimed_at DESC`
+    )
+    .all(courierId)
+    .map(toPlain) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// Courier earnings balance & payout requests
+// ---------------------------------------------------------------------------
+
+/** Unpaid delivery earnings + bonuses, minus anything already requested. */
+export function courierEarningsSummary(courierId: string) {
+  const delivered = db
+    .prepare(
+      `SELECT COALESCE(SUM(courier_fee_cents),0) as total, COUNT(*) as count
+       FROM orders WHERE courier_id = ? AND status = 'DELIVERED'`
+    )
+    .get(courierId) as any;
+
+  const bonuses = db
+    .prepare(`SELECT COALESCE(SUM(bonus_cents),0) as total FROM challenge_claims WHERE courier_id = ?`)
+    .get(courierId) as any;
+
+  const paidOut = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount_cents),0) as total FROM payout_requests
+       WHERE courier_id = ? AND status IN ('requested','approved','paid')`
+    )
+    .get(courierId) as any;
+
+  const grossCents = (delivered?.total ?? 0) + (bonuses?.total ?? 0);
+  return {
+    deliveries: delivered?.count ?? 0,
+    deliveryEarningsCents: delivered?.total ?? 0,
+    bonusCents: bonuses?.total ?? 0,
+    grossCents,
+    paidOrPendingCents: paidOut?.total ?? 0,
+    availableCents: Math.max(0, grossCents - (paidOut?.total ?? 0)),
+  };
+}
+
+export function createPayoutRequest(input: {
+  courierId: string;
+  amountCents: number;
+  feeCents: number;
+  method: "instant" | "weekly";
+}) {
+  const requestId = id();
+  db.prepare(
+    `INSERT INTO payout_requests (id, courier_id, amount_cents, fee_cents, method, status, created_at)
+     VALUES (?, ?, ?, ?, ?, 'requested', ?)`
+  ).run(requestId, input.courierId, input.amountCents, input.feeCents, input.method, now());
+  return requestId;
+}
+
+export function listPayoutRequests(courierId?: string) {
+  const sql = courierId
+    ? `SELECT p.*, u.email as courierEmail FROM payout_requests p
+       JOIN courier_profiles c ON c.id = p.courier_id JOIN users u ON u.id = c.user_id
+       WHERE p.courier_id = ? ORDER BY p.created_at DESC`
+    : `SELECT p.*, u.email as courierEmail FROM payout_requests p
+       JOIN courier_profiles c ON c.id = p.courier_id JOIN users u ON u.id = c.user_id
+       ORDER BY p.created_at DESC LIMIT 100`;
+  const stmt = db.prepare(sql);
+  return (courierId ? stmt.all(courierId) : stmt.all()).map(toPlain) as any[];
+}
+
+export function setPayoutStatus(requestId: string, status: string, adminUserId: string, note?: string) {
+  const result = db
+    .prepare(`UPDATE payout_requests SET status = ?, note = ?, processed_at = ? WHERE id = ?`)
+    .run(status, note ?? null, now(), requestId);
+  if (result.changes > 0) writeAudit(adminUserId, `payout_${status}`, "payout", requestId, note);
+  return result.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Demand heat map
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the work is right now: pending/active orders grouped by pickup
+ * area, so couriers can position themselves instead of guessing.
+ */
+export function demandHeatmap(hours = 24) {
+  const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+  return db
+    .prepare(
+      `SELECT z.id as zoneId, z.name as zoneName, z.city as city,
+              z.surge_multiplier as surgeMultiplier,
+              COUNT(*) as orderCount,
+              SUM(CASE WHEN o.status = 'PENDING' THEN 1 ELSE 0 END) as waiting,
+              AVG(o.pickup_lat) as avgLat, AVG(o.pickup_lng) as avgLng
+       FROM orders o JOIN zones z ON z.id = o.zone_id
+       WHERE o.created_at >= ?
+       GROUP BY z.id ORDER BY waiting DESC, orderCount DESC`
+    )
+    .all(since)
+    .map(toPlain) as any[];
+}
+
+/** Busiest hours of day over the last N days — "when should I work?" */
+export function demandByHour(days = 7) {
+  const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
+  return db
+    .prepare(
+      `SELECT CAST(strftime('%H', created_at) AS INTEGER) as hour, COUNT(*) as orderCount
+       FROM orders WHERE created_at >= ? GROUP BY hour ORDER BY hour ASC`
+    )
+    .all(since)
+    .map(toPlain) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// Support tickets — wired into the admin panel
+// ---------------------------------------------------------------------------
+
+export function createTicket(input: {
+  openedByRole: "merchant" | "courier" | "customer" | "admin";
+  openedByUserId?: string | null;
+  contactEmail?: string | null;
+  orderId?: string | null;
+  category: string;
+  subject: string;
+  body: string;
+  priority?: string;
+}) {
+  const ticketId = id();
+  const reference = `SD-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+  db.prepare(
+    `INSERT INTO support_tickets
+      (id, reference, opened_by_role, opened_by_user_id, contact_email, order_id, category, subject, priority, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
+  ).run(
+    ticketId,
+    reference,
+    input.openedByRole,
+    input.openedByUserId ?? null,
+    input.contactEmail ?? null,
+    input.orderId ?? null,
+    input.category,
+    input.subject,
+    input.priority ?? "normal",
+    now(),
+    now()
+  );
+
+  addTicketMessage({
+    ticketId,
+    senderRole: input.openedByRole,
+    senderUserId: input.openedByUserId ?? null,
+    body: input.body,
+  });
+
+  return { ticketId, reference };
+}
+
+export function addTicketMessage(input: {
+  ticketId: string;
+  senderRole: string;
+  senderUserId?: string | null;
+  body: string;
+  internal?: boolean;
+}) {
+  db.prepare(
+    `INSERT INTO ticket_messages (id, ticket_id, sender_role, sender_user_id, body, internal, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id(),
+    input.ticketId,
+    input.senderRole,
+    input.senderUserId ?? null,
+    input.body,
+    input.internal ? 1 : 0,
+    now()
+  );
+  db.prepare(`UPDATE support_tickets SET updated_at = ? WHERE id = ?`).run(now(), input.ticketId);
+}
+
+export function listTickets(status?: string) {
+  const sql = status
+    ? `SELECT t.*, o.customer_name as orderCustomer FROM support_tickets t
+       LEFT JOIN orders o ON o.id = t.order_id WHERE t.status = ? ORDER BY t.updated_at DESC LIMIT 100`
+    : `SELECT t.*, o.customer_name as orderCustomer FROM support_tickets t
+       LEFT JOIN orders o ON o.id = t.order_id ORDER BY t.updated_at DESC LIMIT 100`;
+  const stmt = db.prepare(sql);
+  return (status ? stmt.all(status) : stmt.all()).map(toPlain) as any[];
+}
+
+export function getTicket(ticketId: string) {
+  const r = db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(ticketId) as any;
+  return r ? toPlain(r) : null;
+}
+
+export function getTicketByReference(reference: string) {
+  const r = db.prepare(`SELECT * FROM support_tickets WHERE reference = ?`).get(reference) as any;
+  return r ? toPlain(r) : null;
+}
+
+export function listTicketMessages(ticketId: string, includeInternal: boolean) {
+  const sql = includeInternal
+    ? `SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC`
+    : `SELECT * FROM ticket_messages WHERE ticket_id = ? AND internal = 0 ORDER BY created_at ASC`;
+  return db.prepare(sql).all(ticketId).map(toPlain) as any[];
+}
+
+export function listTicketsForUser(userId: string) {
+  return db
+    .prepare(`SELECT * FROM support_tickets WHERE opened_by_user_id = ? ORDER BY updated_at DESC LIMIT 50`)
+    .all(userId)
+    .map(toPlain) as any[];
+}
+
+export function setTicketStatus(ticketId: string, status: string, adminUserId: string) {
+  db.prepare(
+    `UPDATE support_tickets SET status = ?, updated_at = ?, resolved_at = CASE WHEN ? IN ('resolved','closed') THEN ? ELSE resolved_at END WHERE id = ?`
+  ).run(status, now(), status, now(), ticketId);
+  writeAudit(adminUserId, `ticket_${status}`, "ticket", ticketId);
+}
+
+export function ticketCounts() {
+  return db
+    .prepare(`SELECT status, COUNT(*) as count FROM support_tickets GROUP BY status`)
+    .all()
+    .map(toPlain) as any[];
+}
+
+// ---------------------------------------------------------------------------
+// Disputes & claims
+// ---------------------------------------------------------------------------
+
+export function createDispute(input: {
+  orderId: string;
+  raisedBy: string;
+  reason: string;
+  orderAmountCents?: number | null;
+}) {
+  const disputeId = id();
+  db.prepare(
+    `INSERT INTO disputes (id, order_id, raised_by, reason, status, order_amount_cents, created_at)
+     VALUES (?, ?, ?, ?, 'open', ?, ?)`
+  ).run(disputeId, input.orderId, input.raisedBy, input.reason, input.orderAmountCents ?? null, now());
+  logEvent(input.orderId, "dispute_opened", { raisedBy: input.raisedBy, reason: input.reason });
+  return disputeId;
+}
+
+export function listDisputes(status?: string) {
+  const sql = status
+    ? `SELECT d.*, o.customer_name as customerName, o.merchant_id as merchantId, m.business_name as merchantName
+       FROM disputes d JOIN orders o ON o.id = d.order_id
+       LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
+       WHERE d.status = ? ORDER BY d.created_at DESC LIMIT 100`
+    : `SELECT d.*, o.customer_name as customerName, o.merchant_id as merchantId, m.business_name as merchantName
+       FROM disputes d JOIN orders o ON o.id = d.order_id
+       LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
+       ORDER BY d.created_at DESC LIMIT 100`;
+  const stmt = db.prepare(sql);
+  return (status ? stmt.all(status) : stmt.all()).map(toPlain) as any[];
+}
+
+export function resolveDispute(input: {
+  disputeId: string;
+  status: "resolved" | "rejected";
+  resolution: string;
+  resolutionAmountCents?: number | null;
+  adminUserId: string;
+}) {
+  const result = db
+    .prepare(
+      `UPDATE disputes SET status = ?, resolution = ?, resolution_amount_cents = ?, resolved_by = ?, resolved_at = ?
+       WHERE id = ? AND status = 'open'`
+    )
+    .run(
+      input.status,
+      input.resolution,
+      input.resolutionAmountCents ?? null,
+      input.adminUserId,
+      now(),
+      input.disputeId
+    );
+  if (result.changes > 0) {
+    writeAudit(input.adminUserId, `dispute_${input.status}`, "dispute", input.disputeId, input.resolution);
+  }
+  return result.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Compliance — age verification, temperature, pay transparency
+// ---------------------------------------------------------------------------
+
+export function recordAgeVerification(
+  orderId: string,
+  courierId: string,
+  method: "id_checked" | "refused_underage" | "refused_no_id"
+) {
+  const result = db
+    .prepare(
+      `UPDATE orders SET age_verified_at = ?, age_verification_method = ? WHERE id = ? AND courier_id = ?`
+    )
+    .run(now(), method, orderId, courierId);
+  if (result.changes > 0) logEvent(orderId, "age_verification", { method });
+  return result.changes > 0;
+}
+
+export function setCourierEquipment(courierId: string, hasInsulatedBag: boolean) {
+  db.prepare(`UPDATE courier_profiles SET has_insulated_bag = ? WHERE id = ?`).run(
+    hasInsulatedBag ? 1 : 0,
+    courierId
+  );
+}
+
+export function setUserLocale(userId: string, locale: string) {
+  db.prepare(`UPDATE users SET locale = ? WHERE id = ?`).run(locale, userId);
+}
+
+/**
+ * Ontario's Digital Platform Workers' Rights Act requires platforms to be
+ * transparent about pay and about time actually worked. This computes the
+ * engaged time and effective hourly rate for a courier's period, which is
+ * what the pay-transparency statement shows them.
+ */
+export function courierPayTransparency(courierId: string, days = 14) {
+  const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT assigned_at, delivered_at, courier_fee_cents
+       FROM orders
+       WHERE courier_id = ? AND status = 'DELIVERED' AND assigned_at >= ? AND delivered_at IS NOT NULL`
+    )
+    .all(courierId, since) as any[];
+
+  let engagedMinutes = 0;
+  let earningsCents = 0;
+  for (const r of rows) {
+    const mins = (new Date(r.delivered_at).getTime() - new Date(r.assigned_at).getTime()) / 60000;
+    if (mins > 0 && mins < 480) engagedMinutes += mins; // ignore obviously broken spans
+    earningsCents += r.courier_fee_cents ?? 0;
+  }
+
+  const bonuses = db
+    .prepare(
+      `SELECT COALESCE(SUM(bonus_cents),0) as total FROM challenge_claims
+       WHERE courier_id = ? AND claimed_at >= ?`
+    )
+    .get(courierId, since) as any;
+
+  const totalCents = earningsCents + (bonuses?.total ?? 0);
+  const hours = engagedMinutes / 60;
+
+  // An effective hourly rate only means something once there's a real
+  // amount of engaged time behind it. Dividing $6 of earnings by six
+  // seconds of work produces a number in the tens of thousands, which
+  // would be nonsense on a pay-transparency statement — so below half an
+  // hour of engaged time we report no rate rather than a fantasy one.
+  const MIN_HOURS_FOR_RATE = 0.5;
+  const hasEnoughData = hours >= MIN_HOURS_FOR_RATE;
+
+  return {
+    periodDays: days,
+    deliveries: rows.length,
+    engagedHours: Math.round(hours * 100) / 100,
+    engagedMinutes: Math.round(engagedMinutes),
+    deliveryEarningsCents: earningsCents,
+    bonusCents: bonuses?.total ?? 0,
+    totalCents,
+    effectiveHourlyCents: hasEnoughData ? Math.round(totalCents / hours) : null,
+    rateUnavailableReason: hasEnoughData
+      ? null
+      : "Not enough engaged time yet this period to show a meaningful hourly rate.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Courier supply forecasting
+// ---------------------------------------------------------------------------
+
+/**
+ * How many couriers each zone is likely to need, by hour, based on the
+ * last few weeks of demand and average deliveries per courier-hour.
+ */
+export function supplyForecast(lookbackDays = 21, deliveriesPerCourierHour = 2.5) {
+  const since = new Date(Date.now() - lookbackDays * 86400 * 1000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT z.id as zoneId, z.city as city, z.name as zoneName,
+              CAST(strftime('%H', o.created_at) AS INTEGER) as hour,
+              COUNT(*) as orders
+       FROM orders o JOIN zones z ON z.id = o.zone_id
+       WHERE o.created_at >= ?
+       GROUP BY z.id, hour`
+    )
+    .all(since) as any[];
+
+  const weeks = Math.max(1, lookbackDays / 7);
+
+  return rows
+    .map((r) => {
+      const avgPerHour = r.orders / (lookbackDays || 1);
+      const couriersNeeded = Math.max(1, Math.ceil(avgPerHour / deliveriesPerCourierHour));
+      return {
+        zoneId: r.zoneId,
+        city: r.city,
+        zoneName: r.zoneName,
+        hour: r.hour,
+        avgOrdersPerDay: Math.round(avgPerHour * 10) / 10,
+        weeklyOrders: Math.round(r.orders / weeks),
+        couriersNeeded,
+      };
+    })
+    .sort((a, b) => b.avgOrdersPerDay - a.avgOrdersPerDay);
+}
+
 export function orderStatusCounts() {
   return db
     .prepare(`SELECT status, COUNT(*) as count FROM orders GROUP BY status`)
@@ -1061,4 +1993,52 @@ export function countOnlineCouriers() {
   return (
     db.prepare(`SELECT COUNT(*) as c FROM courier_profiles WHERE is_online = 1`).get() as any
   ).c as number;
+}
+
+/**
+ * The numbers an ops person actually acts on, in one round trip.
+ *
+ * A dashboard of totals (how many merchants exist, how many orders ever)
+ * tells you nothing you can do something about. These are the queues: work
+ * waiting on a human, deliveries stuck without a courier, and today's volume
+ * to compare against.
+ */
+export function opsSummary() {
+  const one = (sql: string, ...params: any[]) =>
+    ((db.prepare(sql).get(...params) as any)?.c ?? 0) as number;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const since = todayStart.toISOString();
+
+  const revenue = db
+    .prepare(
+      `SELECT COALESCE(SUM(price_cents),0) as gross, COALESCE(SUM(platform_fee_cents),0) as net
+       FROM orders WHERE status = 'DELIVERED' AND delivered_at >= ?`
+    )
+    .get(since) as any;
+
+  return {
+    pendingMerchants: one(`SELECT COUNT(*) as c FROM merchant_profiles WHERE kyb_status = 'pending'`),
+    pendingCouriers: one(`SELECT COUNT(*) as c FROM courier_profiles WHERE approval_status = 'pending'`),
+    unassignedOrders: one(
+      `SELECT COUNT(*) as c FROM orders WHERE status = 'PENDING' AND courier_id IS NULL`
+    ),
+    inFlightOrders: one(
+      `SELECT COUNT(*) as c FROM orders WHERE status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT')`
+    ),
+    openDisputes: one(`SELECT COUNT(*) as c FROM disputes WHERE status = 'open'`),
+    openTickets: one(`SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'`),
+    pendingPayouts: one(`SELECT COUNT(*) as c FROM payout_requests WHERE status = 'requested'`),
+    deliveredToday: one(
+      `SELECT COUNT(*) as c FROM orders WHERE status = 'DELIVERED' AND delivered_at >= ?`,
+      since
+    ),
+    failedToday: one(
+      `SELECT COUNT(*) as c FROM orders WHERE status = 'FAILED' AND created_at >= ?`,
+      since
+    ),
+    grossTodayCents: (revenue?.gross ?? 0) as number,
+    platformTodayCents: (revenue?.net ?? 0) as number,
+  };
 }

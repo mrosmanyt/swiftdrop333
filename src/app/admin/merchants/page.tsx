@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
-import { listMerchants } from "@/lib/repo";
+import { listMerchants, merchantPickupStats } from "@/lib/repo";
 
 export default async function AdminMerchantsPage() {
   const user = await getSessionUser();
@@ -11,36 +11,52 @@ export default async function AdminMerchantsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Merchants</h1>
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="text-gray-400">
+          <thead className="text-fg-subtle">
             <tr>
               <th className="p-3">Business</th>
               <th className="p-3">Email</th>
               <th className="p-3">KYB status</th>
               <th className="p-3">Orders</th>
+              <th className="p-3">Courier rating</th>
+              <th className="p-3">Avg pickup wait</th>
             </tr>
           </thead>
           <tbody>
             {merchants.map((m) => (
-              <tr key={m!.id} className="border-t border-gray-100">
+              <tr key={m!.id} className="border-t border-line">
                 <td className="p-3">{m!.businessName}</td>
                 <td className="p-3">{m!.email}</td>
                 <td className="p-3">
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs ${
-                      m!.kybStatus === "verified" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                      m!.kybStatus === "verified" ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn"
                     }`}
                   >
                     {m!.kybStatus}
                   </span>
                 </td>
                 <td className="p-3">{m!.orderCount}</td>
+                <td className="p-3">{m!.rating ? `${m!.rating.toFixed(1)}★` : "—"}</td>
+                <td className="p-3">
+                  {(() => {
+                    const s = merchantPickupStats(m!.id);
+                    if (!s.samples || s.avgWaitMinutes == null) return <span className="text-fg-subtle">—</span>;
+                    const slow = s.avgWaitMinutes > 10;
+                    return (
+                      <span className={slow ? "font-medium text-danger" : "text-fg-muted"}>
+                        {s.avgWaitMinutes} min
+                        <span className="ml-1 text-xs text-fg-subtle">({s.samples})</span>
+                      </span>
+                    );
+                  })()}
+                </td>
               </tr>
             ))}
             {!merchants.length && (
               <tr>
-                <td className="p-3 text-gray-400" colSpan={4}>
+                <td className="p-3 text-fg-subtle" colSpan={6}>
                   No merchants yet.
                 </td>
               </tr>

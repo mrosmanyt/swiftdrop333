@@ -6,7 +6,7 @@ export default function SignOutButton() {
   return (
     <button
       onClick={() => signOut({ callbackUrl: "/login" })}
-      className="text-sm text-gray-400 hover:text-red-500"
+      className="text-sm text-fg-subtle hover:text-danger"
     >
       Sign out
     </button>

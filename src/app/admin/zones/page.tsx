@@ -16,9 +16,9 @@ export default async function AdminZonesPage() {
         <NewZoneForm />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="text-gray-400">
+          <thead className="text-fg-subtle">
             <tr>
               <th className="p-3">City</th>
               <th className="p-3">Zone</th>
@@ -29,7 +29,7 @@ export default async function AdminZonesPage() {
           </thead>
           <tbody>
             {zones.map((z) => (
-              <tr key={z!.id} className="border-t border-gray-100">
+              <tr key={z!.id} className="border-t border-line">
                 <td className="p-3">{z!.city}</td>
                 <td className="p-3">{z!.name}</td>
                 <td className="p-3">${(z!.baseRateCents / 100).toFixed(2)}</td>
@@ -39,7 +39,7 @@ export default async function AdminZonesPage() {
             ))}
             {!zones.length && (
               <tr>
-                <td className="p-3 text-gray-400" colSpan={5}>
+                <td className="p-3 text-fg-subtle" colSpan={5}>
                   No zones yet — add one above.
                 </td>
               </tr>

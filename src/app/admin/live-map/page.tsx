@@ -10,7 +10,7 @@ export default async function AdminLiveMapPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Live Ops Map</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-fg-muted">
           Every courier currently on an active delivery — position updates every ~5 seconds.
         </p>
       </div>

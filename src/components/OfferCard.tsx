@@ -76,8 +76,8 @@ export default function OfferCard({
 
   return (
     <div
-      className={`rounded-xl border bg-white p-4 ${
-        broadcast ? "border-gray-200" : urgent ? "border-red-300" : "border-brand"
+      className={`rounded-xl border bg-surface p-4 ${
+        broadcast ? "border-line" : urgent ? "border-danger/30" : "border-accent"
       }`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -85,17 +85,17 @@ export default function OfferCard({
           <div className="flex items-center gap-2">
             <p className="font-medium">{zoneName}</p>
             {broadcast ? (
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">open to all</span>
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">open to all</span>
             ) : (
-              <span className="rounded-full bg-brand-light px-2 py-0.5 text-xs text-brand-dark">
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">
                 offered to you
               </span>
             )}
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-fg-muted">
             {pickupAddress} → {dropoffAddress}
           </p>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-fg-subtle">
             {serviceType}
             {distanceKm ? ` · ${distanceKm.toFixed(1)} km` : ""}
             {windowEnd ? ` · by ${new Date(windowEnd).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
@@ -103,9 +103,9 @@ export default function OfferCard({
         </div>
 
         <div className="text-right">
-          <p className="text-lg font-semibold text-brand">${(courierFeeCents / 100).toFixed(2)}</p>
+          <p className="text-lg font-semibold text-accent">${(courierFeeCents / 100).toFixed(2)}</p>
           {secondsLeft !== null && !broadcast && (
-            <p className={`text-xs font-medium ${urgent ? "text-red-500" : "text-gray-400"}`}>
+            <p className={`text-xs font-medium ${urgent ? "text-danger" : "text-fg-subtle"}`}>
               {secondsLeft}s left
             </p>
           )}
@@ -116,7 +116,7 @@ export default function OfferCard({
         <button
           onClick={accept}
           disabled={busy}
-          className="flex-1 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+          className="flex-1 rounded-lg bg-accent-solid px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
           {busy ? "…" : "Accept"}
         </button>
@@ -124,13 +124,13 @@ export default function OfferCard({
           <button
             onClick={decline}
             disabled={busy}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-line px-3 py-2 text-sm text-fg-muted hover:bg-bg-soft disabled:opacity-50"
           >
             Pass
           </button>
         )}
       </div>
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
     </div>
   );
 }

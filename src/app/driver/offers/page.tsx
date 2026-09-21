@@ -23,10 +23,10 @@ export default async function DriverOffersPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-xl font-bold">Offers</h1>
-        <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+        <div className="rounded-xl border border-warn/30 bg-warn-soft p-4 text-sm text-warn">
           <p className="font-medium">Not available yet</p>
           <p className="mt-1">{blockReason}</p>
-          <a href="/driver/documents" className="mt-2 inline-block font-medium text-brand hover:underline">
+          <a href="/driver/documents" className="mt-2 inline-block font-medium text-accent hover:underline">
             Go to your documents →
           </a>
         </div>
@@ -54,14 +54,14 @@ export default async function DriverOffersPage() {
             <ActiveDeliveryCard key={o!.id} order={o as any} />
           ))}
           {!activeOrders.length && (
-            <p className="text-sm text-gray-400">No active deliveries — accept an offer below.</p>
+            <p className="text-sm text-fg-subtle">No active deliveries — accept an offer below.</p>
           )}
         </div>
       </div>
 
       <div>
         <h2 className="mb-3 text-lg font-semibold">
-          Offers for you {myOffers.length > 0 && <span className="text-brand">({myOffers.length})</span>}
+          Offers for you {myOffers.length > 0 && <span className="text-accent">({myOffers.length})</span>}
         </h2>
         <div className="space-y-3">
           {myOffers.map((o: any) => (
@@ -80,7 +80,7 @@ export default async function DriverOffersPage() {
             />
           ))}
           {!myOffers.length && (
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-fg-subtle">
               Nothing offered right now — stay online and the next nearby delivery comes to you.
             </p>
           )}
@@ -90,7 +90,7 @@ export default async function DriverOffersPage() {
       {broadcastOrders.length > 0 && (
         <div>
           <h2 className="mb-3 text-lg font-semibold">Open deliveries</h2>
-          <p className="mb-2 text-xs text-gray-400">
+          <p className="mb-2 text-xs text-fg-subtle">
             These weren&apos;t picked up by anyone nearby — first to accept gets them.
           </p>
           <div className="space-y-3">
@@ -117,10 +117,10 @@ export default async function DriverOffersPage() {
 
 function TierBadge({ tier }: { tier: string }) {
   const colors: Record<string, string> = {
-    STARTER: "bg-gray-100 text-gray-600",
-    SILVER: "bg-slate-200 text-slate-700",
-    GOLD: "bg-yellow-100 text-yellow-700",
-    PRO: "bg-brand-light text-brand-dark",
+    STARTER: "bg-surface-2 text-fg-muted",
+    SILVER: "bg-fg/10 text-fg-muted",
+    GOLD: "bg-warn-soft text-warn",
+    PRO: "bg-accent/10 text-accent",
   };
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${colors[tier]}`}>

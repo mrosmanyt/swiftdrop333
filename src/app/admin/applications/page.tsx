@@ -16,7 +16,7 @@ export default async function AdminApplicationsPage() {
       <AutoRefresh intervalMs={15000} />
       <div>
         <h1 className="text-2xl font-bold">Applications</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-fg-muted">
           {merchants.length + couriers.length} waiting for review.
         </p>
       </div>
@@ -41,7 +41,7 @@ export default async function AdminApplicationsPage() {
             documents={listDocuments("merchant", m!.id)}
           />
         ))}
-        {!merchants.length && <p className="text-sm text-gray-400">No business applications waiting.</p>}
+        {!merchants.length && <p className="text-sm text-fg-subtle">No business applications waiting.</p>}
       </section>
 
       <section className="space-y-3">
@@ -68,7 +68,7 @@ export default async function AdminApplicationsPage() {
             documents={listDocuments("courier", c!.id)}
           />
         ))}
-        {!couriers.length && <p className="text-sm text-gray-400">No courier applications waiting.</p>}
+        {!couriers.length && <p className="text-sm text-fg-subtle">No courier applications waiting.</p>}
       </section>
     </div>
   );

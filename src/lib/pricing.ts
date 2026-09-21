@@ -14,6 +14,12 @@ interface PriceInput {
   perKmCents: number;
   distanceKm: number;
   serviceType: ServiceType;
+  /**
+   * Demand multiplier for the zone (snow, holidays, peak hours). Applied
+   * to the whole fare — so the courier's share rises with it, which is the
+   * point: surge exists to pull couriers online, not to pad margin.
+   */
+  surgeMultiplier?: number;
 }
 
 const SERVICE_TYPE_MULTIPLIER: Record<ServiceType, number> = {
@@ -23,10 +29,18 @@ const SERVICE_TYPE_MULTIPLIER: Record<ServiceType, number> = {
   BATCH: 0.7,
 };
 
-export function computeOrderPrice({ baseRateCents, perKmCents, distanceKm, serviceType }: PriceInput) {
+export function computeOrderPrice({
+  baseRateCents,
+  perKmCents,
+  distanceKm,
+  serviceType,
+  surgeMultiplier = 1,
+}: PriceInput) {
   const distanceCents = Math.round(perKmCents * distanceKm);
   const subtotal = baseRateCents + distanceCents;
-  const priceCents = Math.round(subtotal * SERVICE_TYPE_MULTIPLIER[serviceType]);
+  const priceCents = Math.round(
+    subtotal * SERVICE_TYPE_MULTIPLIER[serviceType] * Math.max(1, surgeMultiplier)
+  );
 
   const platformFeeCents = Math.round(priceCents * PLATFORM_TAKE_RATE);
   const courierFeeCents = priceCents - platformFeeCents;

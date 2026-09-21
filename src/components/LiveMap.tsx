@@ -9,7 +9,7 @@ export type { MapMarker };
 const LiveMapInner = dynamic(() => import("./LiveMapInner"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[320px] w-full items-center justify-center rounded-xl bg-gray-100 text-sm text-gray-400">
+    <div className="flex h-[320px] w-full items-center justify-center rounded-xl bg-surface-2 text-sm text-fg-subtle">
       Loading map…
     </div>
   ),

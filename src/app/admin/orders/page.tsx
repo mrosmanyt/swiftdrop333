@@ -25,14 +25,14 @@ export default async function AdminOrdersPage() {
 
       <div>
         <h1 className="text-2xl font-bold">Orders</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-fg-muted">
           {orders.length} total · {stuck} waiting for a courier
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="text-gray-400">
+          <thead className="text-fg-subtle">
             <tr>
               <th className="p-3">Order</th>
               <th className="p-3">Merchant</th>
@@ -45,18 +45,18 @@ export default async function AdminOrdersPage() {
           </thead>
           <tbody>
             {orders.map((o) => (
-              <tr key={o!.id} className="border-t border-gray-100 align-top">
+              <tr key={o!.id} className="border-t border-line align-top">
                 <td className="p-3">
-                  <Link href={`/track/${o!.id}`} className="font-mono text-xs text-brand hover:underline">
+                  <Link href={`/track/${o!.id}`} className="font-mono text-xs text-accent hover:underline">
                     {o!.id.slice(0, 8)}…
                   </Link>
-                  <div className="text-xs text-gray-400">{o!.customerName}</div>
+                  <div className="text-xs text-fg-subtle">{o!.customerName}</div>
                 </td>
                 <td className="p-3">{o!.merchantBusinessName}</td>
                 <td className="p-3">
                   <StatusPill status={o!.status} />
                   {o!.failureReason && (
-                    <div className="mt-1 text-xs text-red-500">{o!.failureReason}</div>
+                    <div className="mt-1 text-xs text-danger">{o!.failureReason}</div>
                   )}
                 </td>
                 <td className="p-3 text-xs">{o!.courierEmail ?? "—"}</td>
@@ -70,7 +70,7 @@ export default async function AdminOrdersPage() {
                       })
                     : "ASAP"}
                 </td>
-                <td className="p-3 text-xs text-gray-500">{o!.dispatchMode}</td>
+                <td className="p-3 text-xs text-fg-muted">{o!.dispatchMode}</td>
                 <td className="p-3">
                   <AdminOrderActions orderId={o!.id} status={o!.status} couriers={couriers} />
                 </td>
@@ -78,7 +78,7 @@ export default async function AdminOrdersPage() {
             ))}
             {!orders.length && (
               <tr>
-                <td className="p-3 text-gray-400" colSpan={7}>
+                <td className="p-3 text-fg-subtle" colSpan={7}>
                   No orders yet.
                 </td>
               </tr>
@@ -93,12 +93,12 @@ export default async function AdminOrdersPage() {
 function StatusPill({ status }: { status: string }) {
   const tone =
     status === "DELIVERED"
-      ? "bg-green-100 text-green-700"
+      ? "bg-ok-soft text-ok"
       : status === "PENDING"
-      ? "bg-yellow-100 text-yellow-700"
+      ? "bg-warn-soft text-warn"
       : status === "FAILED" || status === "RETURNING" || status === "RETURNED"
-      ? "bg-red-100 text-red-700"
-      : "bg-blue-100 text-blue-700";
+      ? "bg-danger-soft text-danger"
+      : "bg-info-soft text-info";
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs ${tone}`}>
       {ORDER_STATUS_LABEL[status as OrderStatus] ?? status}

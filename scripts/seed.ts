@@ -13,6 +13,7 @@ import {
   createZone,
   findUserByEmail,
 } from "../src/lib/repo";
+import { seedDemoHistory, seedDemoMerchantTools } from "./demo-history";
 
 async function main() {
   if (findUserByEmail("merchant@example.com")) {
@@ -110,11 +111,9 @@ async function main() {
     approvalStatus: "pending",
   });
 
-  const adminPasswordHash = await bcrypt.hash("Malik786@", 10);
   const adminUserId = createUser({
-    email: "cenemtech@gmail.com",
-    fullName: "Admin",
-    passwordHash: adminPasswordHash,
+    email: "admin@example.com",
+    passwordHash,
     role: "ADMIN",
   });
   createAdminProfile({
@@ -122,10 +121,13 @@ async function main() {
     permissions: ["manage_merchants", "manage_couriers", "manage_pricing"],
   });
 
-  console.log("Seeded successfully. Test accounts:");
-  console.log("  merchant@example.com          — approved, can book deliveries (password: password123)");
-  console.log("  courier@example.com           — approved, can go online (password: password123)");
-  console.log("  cenemtech@gmail.com           — admin panel (password: Malik786@)");
+  seedDemoHistory();
+  seedDemoMerchantTools();
+
+  console.log("Seeded successfully. Test accounts (password for all: password123):");
+  console.log("  merchant@example.com          — approved, can book deliveries");
+  console.log("  courier@example.com           — approved, can go online");
+  console.log("  admin@example.com             — admin panel");
   console.log("  pending-merchant@example.com  — waiting in the approval queue");
   console.log("  pending-courier@example.com   — waiting in the approval queue");
   console.log("Merchant id:", merchantId, "· Courier id:", courierId);

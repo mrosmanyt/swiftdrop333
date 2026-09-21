@@ -74,6 +74,8 @@ export default function NewOrderPage() {
         serviceType: form.get("serviceType"),
         windowStart,
         windowEnd,
+        requiresAgeVerification: form.get("requiresAgeVerification") === "on",
+        temperatureRequirement: form.get("temperatureRequirement") || "ambient",
       }),
     });
 
@@ -93,14 +95,14 @@ export default function NewOrderPage() {
       <form onSubmit={handleSubmit} className="space-y-3">
         <label className="block text-sm">
           Zone
-          <select name="zoneId" required className="mt-1 w-full rounded-lg border border-gray-300 p-2">
+          <select name="zoneId" required className="mt-1 w-full rounded-lg border border-line p-2">
             {zones.map((z) => (
               <option key={z.id} value={z.id}>
                 {z.city} — {z.name} (from ${(z.baseRateCents / 100).toFixed(2)})
               </option>
             ))}
           </select>
-          {!zones.length && <span className="text-xs text-gray-400">Loading zones…</span>}
+          {!zones.length && <span className="text-xs text-fg-subtle">Loading zones…</span>}
         </label>
 
         <AddressInput label="Pickup address" name="pickupAddress" onChange={setPickup} />
@@ -118,7 +120,7 @@ export default function NewOrderPage() {
               type="date"
               value={deliveryDate}
               onChange={(e) => setDeliveryDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 p-2"
+              className="mt-1 w-full rounded-lg border border-line p-2"
             />
           </label>
           <label className="block text-sm">
@@ -126,7 +128,7 @@ export default function NewOrderPage() {
             <select
               value={windowId}
               onChange={(e) => setWindowId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 p-2"
+              className="mt-1 w-full rounded-lg border border-line p-2"
             >
               {WINDOWS.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -139,7 +141,7 @@ export default function NewOrderPage() {
 
         <label className="block text-sm">
           Service type
-          <select name="serviceType" className="mt-1 w-full rounded-lg border border-gray-300 p-2">
+          <select name="serviceType" className="mt-1 w-full rounded-lg border border-line p-2">
             <option value="SAME_DAY">Same Day</option>
             <option value="NEXT_DAY">Next Day</option>
             <option value="DIRECT">Direct (exclusive courier)</option>
@@ -147,15 +149,41 @@ export default function NewOrderPage() {
           </select>
         </label>
 
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-sm font-medium">Handling requirements</p>
+
+          <label className="mt-2 flex items-start gap-2 text-sm">
+            <input type="checkbox" name="requiresAgeVerification" className="mt-1" />
+            <span>
+              Age-restricted (alcohol, pharmacy)
+              <span className="block text-xs text-fg-subtle">
+                The courier must check photo ID; delivery can&apos;t be completed without it.
+              </span>
+            </span>
+          </label>
+
+          <label className="mt-2 block text-sm">
+            Temperature
+            <select
+              name="temperatureRequirement"
+              className="mt-1 w-full rounded-lg border border-line p-2"
+            >
+              <option value="ambient">Ambient — no special handling</option>
+              <option value="cold">Refrigerated — insulated bag</option>
+              <option value="frozen">Frozen — insulated bag</option>
+            </select>
+          </label>
+        </div>
+
         <button
           type="submit"
           disabled={status === "submitting" || !zones.length}
-          className="w-full rounded-lg bg-brand py-2 font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+          className="w-full rounded-lg bg-accent-solid py-2 font-medium text-white hover:opacity-90 disabled:opacity-50"
         >
           {status === "submitting" ? "Creating…" : "Create delivery"}
         </button>
 
-        {status === "error" && <p className="text-sm text-red-600">{error}</p>}
+        {status === "error" && <p className="text-sm text-danger">{error}</p>}
       </form>
     </div>
   );
@@ -179,7 +207,7 @@ function Field({
         name={name}
         type={type}
         required={required}
-        className="mt-1 w-full rounded-lg border border-gray-300 p-2"
+        className="mt-1 w-full rounded-lg border border-line p-2"
       />
     </label>
   );

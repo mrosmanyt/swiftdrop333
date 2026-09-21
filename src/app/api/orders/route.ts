@@ -2,19 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/session";
 import {
-  createOrder,
   getMerchantProfileByUserId,
-  getZoneById,
   listOrdersForMerchant,
   listAllOrders,
   listActiveOrdersForCourier,
   listDeliveredOrdersForCourier,
   getCourierProfileByUserId,
 } from "@/lib/repo";
-import { computeOrderPrice } from "@/lib/pricing";
 import { merchantBlockReason } from "@/lib/guards";
-import { routeBetween } from "@/lib/geo";
-import { runDispatchTick } from "@/lib/dispatch";
+import { createAndDispatchOrder } from "@/lib/orders";
 
 const createOrderSchema = z.object({
   zoneId: z.string(),
@@ -32,6 +28,9 @@ const createOrderSchema = z.object({
   serviceType: z.enum(["NEXT_DAY", "SAME_DAY", "DIRECT", "BATCH"]).default("SAME_DAY"),
   windowStart: z.string().optional(), // ISO datetime — earliest delivery
   windowEnd: z.string().optional(), // ISO datetime — promised by
+  // Compliance flags (alcohol/pharmacy, cold chain)
+  requiresAgeVerification: z.boolean().optional(),
+  temperatureRequirement: z.enum(["ambient", "cold", "frozen"]).optional(),
 });
 
 // GET /api/orders — scoped by role: merchant sees their own, courier sees
@@ -59,12 +58,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ orders });
   }
 
-  // ADMIN
   return NextResponse.json({ orders: listAllOrders() });
 }
 
-// POST /api/orders — merchant creates a new delivery order. merchantId is
-// always derived from the signed-in session, never trusted from the body.
+/**
+ * POST /api/orders — merchant creates a delivery from the portal.
+ *
+ * merchantId always comes from the session, never the request body. All
+ * the real work (pricing with surge, road distance, dispatch, customer
+ * notifications, merchant webhooks) lives in createAndDispatchOrder so the
+ * portal, CSV import, public API and recurring schedules behave identically.
+ */
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
@@ -76,69 +80,21 @@ export async function POST(req: NextRequest) {
   const blocked = merchantBlockReason(merchant);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
-  const body = await req.json();
-  const parsed = createOrderSchema.safeParse(body);
+  const parsed = createOrderSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const input = parsed.data;
 
-  const zone = getZoneById(input.zoneId);
-  if (!zone || !zone.isActive) {
-    return NextResponse.json({ error: "Unknown or inactive zone" }, { status: 400 });
+  try {
+    const result = await createAndDispatchOrder({
+      ...parsed.data,
+      customerEmail: parsed.data.customerEmail || null,
+      merchantId: merchant!.id,
+      source: "portal",
+    } as any);
+
+    return NextResponse.json({ orderId: result.orderId }, { status: 201 });
+  } catch (e: any) {
+    return NextResponse.json({ error: String(e?.message ?? e) }, { status: 400 });
   }
-
-  // Real road distance when we have coordinates (from address autocomplete)
-  // and the routing service is reachable; a detour-adjusted straight line
-  // otherwise; a flat estimate only if the addresses were never geocoded.
-  let distanceKm = 3;
-  let distanceSource = "flat-estimate";
-  let etaMinutes: number | null = null;
-
-  if (input.pickupLat && input.pickupLng && input.dropoffLat && input.dropoffLng) {
-    const route = await routeBetween(
-      { lat: input.pickupLat, lng: input.pickupLng },
-      { lat: input.dropoffLat, lng: input.dropoffLng }
-    );
-    distanceKm = route.distanceKm;
-    distanceSource = route.source;
-    etaMinutes = route.durationMin;
-  }
-
-  const { priceCents, courierFeeCents, platformFeeCents } = computeOrderPrice({
-    baseRateCents: zone.baseRateCents,
-    perKmCents: zone.perKmCents,
-    distanceKm,
-    serviceType: input.serviceType,
-  });
-
-  const orderId = createOrder({
-    merchantId: merchant!.id,
-    zoneId: input.zoneId,
-    pickupAddress: input.pickupAddress,
-    pickupLat: input.pickupLat ?? null,
-    pickupLng: input.pickupLng ?? null,
-    dropoffAddress: input.dropoffAddress,
-    dropoffLat: input.dropoffLat ?? null,
-    dropoffLng: input.dropoffLng ?? null,
-    customerName: input.customerName,
-    customerPhone: input.customerPhone ?? null,
-    customerEmail: input.customerEmail || null,
-    deliveryInstructions: input.deliveryInstructions ?? null,
-    packageWeightKg: input.packageWeightKg ?? null,
-    serviceType: input.serviceType,
-    priceCents,
-    courierFeeCents,
-    platformFeeCents,
-    windowStart: input.windowStart ?? null,
-    windowEnd: input.windowEnd ?? null,
-    distanceKm,
-    distanceSource,
-    etaMinutes,
-  });
-
-  // Offer it to the best available courier straight away.
-  runDispatchTick();
-
-  return NextResponse.json({ orderId }, { status: 201 });
 }

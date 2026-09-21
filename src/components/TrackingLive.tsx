@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ORDER_STATUS_LABEL, OrderStatus, estimateEtaMinutes, haversineKm } from "@/lib/types";
+import { OrderStatus, estimateEtaMinutes, haversineKm } from "@/lib/types";
+import { translator, Locale } from "@/lib/i18n";
 import LiveMap, { MapMarker } from "./LiveMap";
 import RatingForm from "./RatingForm";
+import OrderChat from "./OrderChat";
 
 const STEPS: OrderStatus[] = ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT", "DELIVERED"];
 
@@ -35,11 +37,14 @@ export default function TrackingLive({
   orderId,
   initialOrder,
   showRating = true,
+  locale = "en",
 }: {
   orderId: string;
   initialOrder: OrderData;
   showRating?: boolean;
+  locale?: Locale;
 }) {
+  const tr = translator(locale);
   const [order, setOrder] = useState<OrderData>(initialOrder);
   const [courierLoc, setCourierLoc] = useState<{ lat: number; lng: number; at: string } | null>(null);
 
@@ -85,18 +90,18 @@ export default function TrackingLive({
   return (
     <div className="mx-auto max-w-md px-6 py-12">
       <h1 className="text-xl font-bold">{order.merchantBusinessName}</h1>
-      <p className="text-gray-500">Delivery to {order.customerName}</p>
+      <p className="text-fg-muted">{tr("track.deliveryTo")} {order.customerName}</p>
 
       {isActive && markers.length > 0 && (
         <div className="mt-4">
           <LiveMap markers={markers} height={260} />
           {eta !== null && (
-            <p className="mt-2 text-sm text-gray-500">
-              Estimated arrival: <span className="font-medium text-brand">~{eta} min</span>
+            <p className="mt-2 text-sm text-fg-muted">
+              {tr("track.eta")}: <span className="font-medium text-accent">~{eta} {tr("track.minutes")}</span>
             </p>
           )}
           {!courierLoc && (
-            <p className="mt-2 text-xs text-gray-400">Waiting for your courier's location…</p>
+            <p className="mt-2 text-xs text-fg-subtle">{tr("track.waitingForCourier")}</p>
           )}
         </div>
       )}
@@ -104,28 +109,35 @@ export default function TrackingLive({
       <div className="mt-8 space-y-4">
         {STEPS.map((step, i) => (
           <div key={step} className="flex items-center gap-3">
-            <span className={`h-3 w-3 rounded-full ${i <= currentStepIndex ? "bg-brand" : "bg-gray-200"}`} />
-            <span className={i <= currentStepIndex ? "font-medium" : "text-gray-400"}>
-              {ORDER_STATUS_LABEL[step]}
+            <span className={`h-3 w-3 rounded-full ${i <= currentStepIndex ? "bg-accent-solid" : "bg-surface-2"}`} />
+            <span className={i <= currentStepIndex ? "font-medium" : "text-fg-subtle"}>
+              {tr(`track.status.${step}`)}
             </span>
           </div>
         ))}
       </div>
 
       {order.courierEmail && (
-        <p className="mt-6 text-sm text-gray-500">
-          Your courier: {order.courierEmail} · {order.courierVehicleType}
+        <p className="mt-6 text-sm text-fg-muted">
+          {tr("track.courierOn")} {String(order.courierVehicleType ?? "vehicle").toLowerCase()}.
         </p>
+      )}
+
+      {/* Chat with the courier — neither side sees the other's number. */}
+      {["ASSIGNED", "PICKED_UP", "IN_TRANSIT", "RETURNING"].includes(order.status) && (
+        <div className="mt-4">
+          <OrderChat orderId={order.id} compact />
+        </div>
       )}
 
       {order.status === "DELIVERED" && order.proofOfDeliveryUrl && (
         <div className="mt-6">
-          <p className="text-sm font-medium">Proof of delivery</p>
+          <p className="text-sm font-medium">{tr("track.proofOfDelivery")}</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={order.proofOfDeliveryUrl}
             alt="Proof of delivery"
-            className="mt-2 rounded-lg border border-gray-200"
+            className="mt-2 rounded-lg border border-line"
           />
         </div>
       )}
@@ -134,7 +146,7 @@ export default function TrackingLive({
         <RatingForm orderId={order.id} />
       )}
       {order.status === "DELIVERED" && order.customerRating != null && (
-        <p className="mt-6 text-sm text-gray-500">Customer rated this delivery {order.customerRating}★. Thanks!</p>
+        <p className="mt-6 text-sm text-fg-muted">{tr("track.rated")} {order.customerRating}★</p>
       )}
     </div>
   );

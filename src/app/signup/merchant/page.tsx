@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import AuthShell from "@/components/AuthShell";
 
 export default function MerchantSignupPage() {
   const [busy, setBusy] = useState(false);
@@ -48,13 +49,19 @@ export default function MerchantSignupPage() {
   }
 
   return (
-    <main className="mx-auto max-w-lg px-6 py-12">
-      <h1 className="text-2xl font-bold text-brand">Business sign-up</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        We verify every business before the first delivery. It usually takes less than a working day.
-      </p>
+    <AuthShell
+      title="Business sign-up"
+      subtitle="We verify every business before the first delivery. It usually takes less than a working day."
+      width="lg"
+      footer={<>
+          Want to deliver instead?{" "}
+          <Link href="/signup/courier" className="text-accent hover:underline">
+            Apply as a courier
+          </Link>
+        </>}
+    >
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-3">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <Field name="businessName" label="Business name" />
         <Field name="contactName" label="Your name" />
         <Field name="email" label="Work email" type="email" />
@@ -67,20 +74,13 @@ export default function MerchantSignupPage() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-lg bg-brand py-2 font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+          className="w-full rounded-lg bg-inverse py-2 font-medium text-inverse-fg hover:opacity-90 disabled:opacity-50"
         >
           {busy ? "Creating account…" : "Create business account"}
         </button>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </form>
-
-      <p className="mt-4 text-sm text-gray-400">
-        Want to deliver instead?{" "}
-        <Link href="/signup/courier" className="text-brand hover:underline">
-          Apply as a courier
-        </Link>
-      </p>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -102,7 +102,7 @@ function Field({
         name={name}
         type={type}
         required={required}
-        className="mt-1 w-full rounded-lg border border-gray-300 p-2"
+        className="mt-1 w-full rounded-lg border border-line bg-bg p-2.5 text-fg outline-none transition focus:border-accent"
       />
     </label>
   );

@@ -13,9 +13,9 @@ export default async function AdminCouriersPage() {
     <div className="space-y-4">
       <AutoRefresh intervalMs={10000} />
       <h1 className="text-2xl font-bold">Couriers</h1>
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="text-gray-400">
+          <thead className="text-fg-subtle">
             <tr>
               <th className="p-3">Email</th>
               <th className="p-3">Vehicle</th>
@@ -28,7 +28,7 @@ export default async function AdminCouriersPage() {
           </thead>
           <tbody>
             {couriers.map((c) => (
-              <tr key={c!.id} className="border-t border-gray-100">
+              <tr key={c!.id} className="border-t border-line">
                 <td className="p-3">{c!.email}</td>
                 <td className="p-3">{c!.vehicleType}</td>
                 <td className="p-3">{c!.tier}</td>
@@ -37,16 +37,16 @@ export default async function AdminCouriersPage() {
                 <td className="p-3">{c!.orderCount}</td>
                 <td className="p-3">
                   {c!.isOnline ? (
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">● Online</span>
+                    <span className="rounded-full bg-ok-soft px-2 py-0.5 text-xs text-ok">● Online</span>
                   ) : (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">○ Offline</span>
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">○ Offline</span>
                   )}
                 </td>
               </tr>
             ))}
             {!couriers.length && (
               <tr>
-                <td className="p-3 text-gray-400" colSpan={7}>
+                <td className="p-3 text-fg-subtle" colSpan={7}>
                   No couriers yet.
                 </td>
               </tr>

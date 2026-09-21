@@ -54,14 +54,14 @@ export default function AdminLiveMap() {
       {markers.length > 0 ? (
         <LiveMap markers={markers} height={360} />
       ) : (
-        <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-400">
+        <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-line text-sm text-fg-subtle">
           No couriers currently on an active delivery.
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="text-gray-400">
+          <thead className="text-fg-subtle">
             <tr>
               <th className="p-3">Merchant</th>
               <th className="p-3">Customer</th>
@@ -72,19 +72,19 @@ export default function AdminLiveMap() {
           </thead>
           <tbody>
             {orders.map((o) => (
-              <tr key={o.id} className="border-t border-gray-100">
+              <tr key={o.id} className="border-t border-line">
                 <td className="p-3">{o.merchantBusinessName}</td>
                 <td className="p-3">{o.customerName}</td>
                 <td className="p-3">{o.courierEmail ?? "—"}</td>
                 <td className="p-3">{o.status}</td>
-                <td className="p-3 text-xs text-gray-400">
+                <td className="p-3 text-xs text-fg-subtle">
                   {o.courierLastLocationAt ? new Date(o.courierLastLocationAt).toLocaleTimeString() : "no signal yet"}
                 </td>
               </tr>
             ))}
             {!orders.length && (
               <tr>
-                <td className="p-3 text-gray-400" colSpan={5}>
+                <td className="p-3 text-fg-subtle" colSpan={5}>
                   No active deliveries right now.
                 </td>
               </tr>
