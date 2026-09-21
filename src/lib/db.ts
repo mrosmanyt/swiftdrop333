@@ -14,16 +14,33 @@ import path from "node:path";
  * functions below, not this file directly, so that's a contained change.
  */
 
+// Next.js's build-time "collecting page data" step imports every API route
+// module in several parallel worker PROCESSES (not threads), each of which
+// would otherwise open this same on-disk file and race to run the schema
+// migrations below. A busy_timeout only smooths over lock *wait* time — on
+// some build filesystems (overlay/network mounts, like Railway's builder)
+// SQLite's WAL shared-memory locking doesn't behave the same as on a normal
+// disk, so workers can still collide with "database is locked" no matter
+// how long the timeout is. The real fix is to not touch the real file
+// during the build at all: each build worker gets its own private
+// in-memory database instead, so there is nothing to lock or race on.
+// Building doesn't execute any route handlers, so this is never observed —
+// it only has to make `import`-time initialization succeed.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
 const dbPath = process.env.SQLITE_PATH ?? path.join(process.cwd(), "data", "swiftdrop.db");
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+if (!isBuildPhase) fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const globalForDb = globalThis as unknown as { __swiftdropDb?: DatabaseSync };
 
-export const db = globalForDb.__swiftdropDb ?? new DatabaseSync(dbPath);
+export const db = globalForDb.__swiftdropDb ?? new DatabaseSync(isBuildPhase ? ":memory:" : dbPath);
 if (process.env.NODE_ENV !== "production") globalForDb.__swiftdropDb = db;
 
 db.exec("PRAGMA journal_mode = WAL;");
 db.exec("PRAGMA foreign_keys = ON;");
+// Belt-and-suspenders: still useful for real concurrent runtime requests
+// (multiple requests hitting the same connection), even though it's no
+// longer what protects the build.
 db.exec("PRAGMA busy_timeout = 5000;");
 
 db.exec(`
@@ -187,6 +204,12 @@ function ensureColumn(table: string, column: string, definition: string) {
   try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   } catch (e: any) {
+    // Next.js's build-time page-data collection imports this module from
+    // several worker processes in parallel, each running these migrations
+    // against the same file. Two workers can both see the column missing
+    // and both attempt to add it — the loser hits "duplicate column name",
+    // which is harmless here (the column exists either way) and safe to
+    // swallow. Any other error still throws.
     if (!/duplicate column name/i.test(String(e?.message ?? e))) throw e;
   }
 }
@@ -229,7 +252,199 @@ ensureColumn("orders", "dispatch_mode", "TEXT NOT NULL DEFAULT 'auto'"); // auto
 ensureColumn("orders", "failure_reason", "TEXT");
 ensureColumn("orders", "returned_at", "TEXT");
 
+// --- Step 3: notifications, chat and two-way ratings ---
+ensureColumn("orders", "arrived_at_pickup", "TEXT");
+ensureColumn("orders", "merchant_rating", "INTEGER"); // courier rates the merchant
+ensureColumn("orders", "merchant_rating_comment", "TEXT");
+ensureColumn("merchant_profiles", "rating", "REAL NOT NULL DEFAULT 5.0");
+
+// --- Step 4: batching, surge, API keys, recurring, challenges ---
+ensureColumn("orders", "batch_id", "TEXT");
+ensureColumn("orders", "batch_sequence", "INTEGER");
+ensureColumn("orders", "surge_multiplier", "REAL NOT NULL DEFAULT 1.0");
+ensureColumn("orders", "source", "TEXT NOT NULL DEFAULT 'portal'"); // portal | csv | api | recurring
+ensureColumn("zones", "surge_multiplier", "REAL NOT NULL DEFAULT 1.0");
+ensureColumn("zones", "surge_note", "TEXT");
+ensureColumn("courier_profiles", "payout_balance_cents", "INTEGER NOT NULL DEFAULT 0");
+
+// --- Step 5: compliance, trust, support ---
+ensureColumn("orders", "requires_age_verification", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("orders", "age_verified_at", "TEXT");
+ensureColumn("orders", "age_verification_method", "TEXT"); // id_checked | refused_underage | refused_no_id
+ensureColumn("orders", "temperature_requirement", "TEXT NOT NULL DEFAULT 'ambient'"); // ambient | cold | frozen
+ensureColumn("orders", "engaged_minutes", "REAL");
+ensureColumn("courier_profiles", "has_insulated_bag", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("courier_profiles", "locale", "TEXT NOT NULL DEFAULT 'en'");
+ensureColumn("disputes", "order_amount_cents", "INTEGER");
+ensureColumn("disputes", "resolution_amount_cents", "INTEGER");
+ensureColumn("disputes", "resolved_by", "TEXT");
+ensureColumn("disputes", "resolved_at", "TEXT");
+
 db.exec(`
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id TEXT PRIMARY KEY,
+  reference TEXT NOT NULL,
+  opened_by_role TEXT NOT NULL,        -- merchant | courier | customer | admin
+  opened_by_user_id TEXT,
+  contact_email TEXT,
+  order_id TEXT REFERENCES orders(id),
+  category TEXT NOT NULL,              -- delivery | payment | account | app | other
+  subject TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'normal',
+  status TEXT NOT NULL DEFAULT 'open', -- open | pending | resolved | closed
+  assigned_to TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON support_tickets(status, created_at);
+
+CREATE TABLE IF NOT EXISTS ticket_messages (
+  id TEXT PRIMARY KEY,
+  ticket_id TEXT NOT NULL REFERENCES support_tickets(id),
+  sender_role TEXT NOT NULL,
+  sender_user_id TEXT,
+  body TEXT NOT NULL,
+  internal INTEGER NOT NULL DEFAULT 0,  -- internal notes aren't shown to the requester
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_messages ON ticket_messages(ticket_id, created_at);
+
+CREATE TABLE IF NOT EXISTS fraud_flags (
+  id TEXT PRIMARY KEY,
+  subject_type TEXT NOT NULL,          -- courier | merchant | order
+  subject_id TEXT NOT NULL,
+  order_id TEXT,
+  rule TEXT NOT NULL,                  -- impossible_speed | duplicate_pod | excessive_cancels | instant_delivery
+  severity TEXT NOT NULL DEFAULT 'medium',
+  detail TEXT,
+  status TEXT NOT NULL DEFAULT 'open', -- open | reviewed | dismissed
+  reviewed_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fraud_status ON fraud_flags(status, created_at);
+
+CREATE TABLE IF NOT EXISTS batches (
+  id TEXT PRIMARY KEY,
+  courier_id TEXT REFERENCES courier_profiles(id),
+  zone_id TEXT REFERENCES zones(id),
+  status TEXT NOT NULL DEFAULT 'open',   -- open | offered | assigned | completed
+  stop_count INTEGER NOT NULL DEFAULT 0,
+  total_km REAL,
+  total_courier_fee_cents INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  assigned_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchant_profiles(id),
+  name TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  webhook_url TEXT,
+  last_used_at TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_apikeys_merchant ON api_keys(merchant_id);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  order_id TEXT,
+  event TEXT NOT NULL,
+  url TEXT NOT NULL,
+  status TEXT NOT NULL,
+  response_code INTEGER,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS recurring_orders (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchant_profiles(id),
+  zone_id TEXT NOT NULL REFERENCES zones(id),
+  label TEXT NOT NULL,
+  pickup_address TEXT NOT NULL,
+  pickup_lat REAL, pickup_lng REAL,
+  dropoff_address TEXT NOT NULL,
+  dropoff_lat REAL, dropoff_lng REAL,
+  customer_name TEXT NOT NULL,
+  customer_phone TEXT,
+  customer_email TEXT,
+  delivery_instructions TEXT,
+  service_type TEXT NOT NULL DEFAULT 'SAME_DAY',
+  days_of_week TEXT NOT NULL,            -- e.g. "1,3,5" (0=Sun)
+  window_hour_start INTEGER,
+  window_hour_end INTEGER,
+  active INTEGER NOT NULL DEFAULT 1,
+  last_generated_date TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_recurring_merchant ON recurring_orders(merchant_id, active);
+
+CREATE TABLE IF NOT EXISTS challenges (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  target_deliveries INTEGER NOT NULL,
+  bonus_cents INTEGER NOT NULL,
+  starts_at TEXT NOT NULL,
+  ends_at TEXT NOT NULL,
+  min_tier TEXT NOT NULL DEFAULT 'STARTER',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS challenge_claims (
+  id TEXT PRIMARY KEY,
+  challenge_id TEXT NOT NULL REFERENCES challenges(id),
+  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),
+  bonus_cents INTEGER NOT NULL,
+  claimed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_unique ON challenge_claims(challenge_id, courier_id);
+
+CREATE TABLE IF NOT EXISTS payout_requests (
+  id TEXT PRIMARY KEY,
+  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),
+  amount_cents INTEGER NOT NULL,
+  fee_cents INTEGER NOT NULL DEFAULT 0,
+  method TEXT NOT NULL,                   -- instant | weekly
+  status TEXT NOT NULL DEFAULT 'requested', -- requested | approved | paid | rejected
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  processed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_payout_courier ON payout_requests(courier_id, status);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  order_id TEXT REFERENCES orders(id),
+  channel TEXT NOT NULL,            -- sms | email
+  recipient TEXT NOT NULL,
+  template TEXT NOT NULL,
+  subject TEXT,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL,             -- sent | logged | failed
+  provider TEXT,                    -- twilio | resend | console
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_order ON notifications(order_id);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL REFERENCES orders(id),
+  sender_role TEXT NOT NULL,        -- customer | courier | merchant | admin
+  sender_user_id TEXT,              -- null for the customer (no account)
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_messages_order ON messages(order_id, created_at);
+
 CREATE TABLE IF NOT EXISTS offers (
   id TEXT PRIMARY KEY,
   order_id TEXT NOT NULL REFERENCES orders(id),
