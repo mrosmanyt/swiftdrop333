@@ -211,6 +211,7 @@ function mapMerchant(r: any) {
     email: r.email, // present when joined with users
     userStatus: r.user_status, // present when joined with users
     orderCount: r.order_count, // present when joined with count
+    deletedAt: r.deleted_at ?? null,
   };
 }
 
@@ -288,10 +289,40 @@ export function listMerchants() {
               (SELECT COUNT(*) FROM orders o WHERE o.merchant_id = m.id) as order_count
        FROM merchant_profiles m
        JOIN users u ON u.id = m.user_id
+       WHERE m.deleted_at IS NULL
        ORDER BY m.created_at DESC`
     )
     .all();
   return rows.map(mapMerchant);
+}
+
+/** Soft delete — moves the merchant to /admin/deleted-records instead of
+ *  erasing it, so a wrong click doesn't destroy real order history. */
+export function softDeleteMerchant(merchantId: string, adminUserId: string) {
+  db.prepare(`UPDATE merchant_profiles SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
+    now(),
+    adminUserId,
+    merchantId
+  );
+  writeAudit(adminUserId, "merchant_deleted", "merchant", merchantId);
+}
+
+export function restoreMerchant(merchantId: string, adminUserId: string) {
+  db.prepare(`UPDATE merchant_profiles SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(
+    merchantId
+  );
+  writeAudit(adminUserId, "merchant_restored", "merchant", merchantId);
+}
+
+export function listDeletedMerchants() {
+  return db
+    .prepare(
+      `SELECT m.*, u.email as email, u.status as user_status
+       FROM merchant_profiles m JOIN users u ON u.id = m.user_id
+       WHERE m.deleted_at IS NOT NULL ORDER BY m.deleted_at DESC`
+    )
+    .all()
+    .map(mapMerchant);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +362,7 @@ function mapCourier(r: any) {
     email: r.email,
     userStatus: r.user_status,
     orderCount: r.order_count,
+    deletedAt: r.deleted_at ?? null,
   };
 }
 
@@ -434,11 +466,40 @@ export function listCouriers(opts: { onlineOnly?: boolean } = {}) {
               (SELECT COUNT(*) FROM orders o WHERE o.courier_id = c.id AND o.status = 'DELIVERED') as order_count
        FROM courier_profiles c
        JOIN users u ON u.id = c.user_id
-       ${opts.onlineOnly ? "WHERE c.is_online = 1" : ""}
+       WHERE c.deleted_at IS NULL ${opts.onlineOnly ? "AND c.is_online = 1" : ""}
        ORDER BY CASE c.tier WHEN 'PRO' THEN 3 WHEN 'GOLD' THEN 2 WHEN 'SILVER' THEN 1 ELSE 0 END DESC`
     )
     .all();
   return rows.map(mapCourier);
+}
+
+/** Soft delete — moves the courier to /admin/deleted-records instead of
+ *  erasing it, so a wrong click doesn't destroy real delivery history. */
+export function softDeleteCourier(courierId: string, adminUserId: string) {
+  db.prepare(`UPDATE courier_profiles SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
+    now(),
+    adminUserId,
+    courierId
+  );
+  writeAudit(adminUserId, "courier_deleted", "courier", courierId);
+}
+
+export function restoreCourier(courierId: string, adminUserId: string) {
+  db.prepare(`UPDATE courier_profiles SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(
+    courierId
+  );
+  writeAudit(adminUserId, "courier_restored", "courier", courierId);
+}
+
+export function listDeletedCouriers() {
+  return db
+    .prepare(
+      `SELECT c.*, u.email as email, u.status as user_status
+       FROM courier_profiles c JOIN users u ON u.id = c.user_id
+       WHERE c.deleted_at IS NOT NULL ORDER BY c.deleted_at DESC`
+    )
+    .all()
+    .map(mapCourier);
 }
 
 export function setCourierOnline(courierId: string, isOnline: boolean) {
@@ -643,6 +704,7 @@ function mapOrder(r: any) {
     courierLastLat: r.courier_last_lat,
     courierLastLng: r.courier_last_lng,
     courierLastLocationAt: r.courier_last_location_at,
+    deletedAt: r.deleted_at ?? null,
   };
 }
 
@@ -705,7 +767,35 @@ export function listActiveOrdersWithCourierLocation() {
 }
 
 export function listAllOrders(limit = 200) {
-  return db.prepare(`${ORDER_SELECT} ORDER BY o.created_at DESC LIMIT ?`).all(limit).map(mapOrder);
+  return db
+    .prepare(`${ORDER_SELECT} WHERE o.deleted_at IS NULL ORDER BY o.created_at DESC LIMIT ?`)
+    .all(limit)
+    .map(mapOrder);
+}
+
+/** Soft delete — moves the order to /admin/deleted-records instead of
+ *  erasing it, so a wrong click doesn't destroy real delivery/payment
+ *  history. Orders reference merchants/couriers by id, so nothing else
+ *  breaks when one disappears from the live list. */
+export function softDeleteOrder(orderId: string, adminUserId: string) {
+  db.prepare(`UPDATE orders SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
+    now(),
+    adminUserId,
+    orderId
+  );
+  writeAudit(adminUserId, "order_deleted", "order", orderId);
+}
+
+export function restoreOrder(orderId: string, adminUserId: string) {
+  db.prepare(`UPDATE orders SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(orderId);
+  writeAudit(adminUserId, "order_restored", "order", orderId);
+}
+
+export function listDeletedOrders(limit = 200) {
+  return db
+    .prepare(`${ORDER_SELECT} WHERE o.deleted_at IS NOT NULL ORDER BY o.deleted_at DESC LIMIT ?`)
+    .all(limit)
+    .map(mapOrder);
 }
 
 export function createOrder(input: {

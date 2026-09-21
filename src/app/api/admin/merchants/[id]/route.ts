@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/session";
-import { getMerchantProfileById, setMerchantKybStatus, setUserStatus } from "@/lib/repo";
+import {
+  getMerchantProfileById,
+  setMerchantKybStatus,
+  setUserStatus,
+  softDeleteMerchant,
+} from "@/lib/repo";
 
 const schema = z.object({
   kybStatus: z.enum(["pending", "verified", "rejected"]).optional(),
@@ -27,5 +32,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     setUserStatus(merchant.userId, parsed.data.userStatus);
   }
 
+  return NextResponse.json({ ok: true });
+}
+
+// DELETE /api/admin/merchants/:id — soft delete: the merchant is hidden from
+// every normal list and moved into /admin/deleted-records, but the row (and
+// its orders) stay in the database so it can be restored later.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireRole("ADMIN");
+  if (auth instanceof NextResponse) return auth;
+
+  const merchant = getMerchantProfileById(params.id);
+  if (!merchant) return NextResponse.json({ error: "Merchant not found" }, { status: 404 });
+
+  softDeleteMerchant(merchant.id, auth.id);
   return NextResponse.json({ ok: true });
 }

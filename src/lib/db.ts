@@ -280,6 +280,16 @@ ensureColumn("disputes", "resolution_amount_cents", "INTEGER");
 ensureColumn("disputes", "resolved_by", "TEXT");
 ensureColumn("disputes", "resolved_at", "TEXT");
 
+// --- Step 6: soft delete — admin "delete" moves a record here instead of
+// erasing it, so it can be reviewed or restored from /admin/deleted-records.
+// A row with deleted_at set is filtered out of every normal list query.
+ensureColumn("merchant_profiles", "deleted_at", "TEXT");
+ensureColumn("merchant_profiles", "deleted_by", "TEXT");
+ensureColumn("courier_profiles", "deleted_at", "TEXT");
+ensureColumn("courier_profiles", "deleted_by", "TEXT");
+ensureColumn("orders", "deleted_at", "TEXT");
+ensureColumn("orders", "deleted_by", "TEXT");
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS support_tickets (
   id TEXT PRIMARY KEY,

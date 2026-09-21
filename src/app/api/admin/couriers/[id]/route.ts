@@ -6,6 +6,7 @@ import {
   setCourierApprovalStatus,
   setCourierBackgroundCheck,
   setUserStatus,
+  softDeleteCourier,
 } from "@/lib/repo";
 
 const schema = z.object({
@@ -37,5 +38,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     setUserStatus(courier.userId, parsed.data.userStatus);
   }
 
+  return NextResponse.json({ ok: true });
+}
+
+// DELETE /api/admin/couriers/:id — soft delete: hides the courier from every
+// normal list and moves it into /admin/deleted-records; the row stays in the
+// database so it can be restored later.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireRole("ADMIN");
+  if (auth instanceof NextResponse) return auth;
+
+  const courier = getCourierProfileById(params.id);
+  if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
+
+  softDeleteCourier(courier.id, auth.id);
   return NextResponse.json({ ok: true });
 }

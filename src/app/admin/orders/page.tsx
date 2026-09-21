@@ -6,6 +6,8 @@ import { ORDER_STATUS_LABEL, OrderStatus } from "@/lib/types";
 import AdminOrderActions from "@/components/AdminOrderActions";
 import AutoRefresh from "@/components/AutoRefresh";
 import DispatchTicker from "@/components/DispatchTicker";
+import DownloadCsvButton from "@/components/DownloadCsvButton";
+import AdminDeleteButton from "@/components/AdminDeleteButton";
 
 export default async function AdminOrdersPage() {
   const user = await getSessionUser();
@@ -23,11 +25,14 @@ export default async function AdminOrdersPage() {
       <AutoRefresh intervalMs={10000} />
       <DispatchTicker intervalMs={10000} />
 
-      <div>
-        <h1 className="text-2xl font-bold">Orders</h1>
-        <p className="text-sm text-fg-muted">
-          {orders.length} total · {stuck} waiting for a courier
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Orders</h1>
+          <p className="text-sm text-fg-muted">
+            {orders.length} total · {stuck} waiting for a courier
+          </p>
+        </div>
+        <DownloadCsvButton href="/api/admin/orders/export" />
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">
@@ -72,7 +77,10 @@ export default async function AdminOrdersPage() {
                 </td>
                 <td className="p-3 text-xs text-fg-muted">{o!.dispatchMode}</td>
                 <td className="p-3">
-                  <AdminOrderActions orderId={o!.id} status={o!.status} couriers={couriers} />
+                  <div className="flex flex-col items-start gap-2">
+                    <AdminOrderActions orderId={o!.id} status={o!.status} couriers={couriers} />
+                    <AdminDeleteButton resource="orders" id={o!.id} label={`order ${o!.id.slice(0, 8)}`} />
+                  </div>
                 </td>
               </tr>
             ))}

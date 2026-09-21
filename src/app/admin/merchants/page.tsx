@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { listMerchants, merchantPickupStats } from "@/lib/repo";
+import DownloadCsvButton from "@/components/DownloadCsvButton";
+import AdminDeleteButton from "@/components/AdminDeleteButton";
 
 export default async function AdminMerchantsPage() {
   const user = await getSessionUser();
@@ -10,7 +12,10 @@ export default async function AdminMerchantsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Merchants</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Merchants</h1>
+        <DownloadCsvButton href="/api/admin/merchants/export" />
+      </div>
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
           <thead className="text-fg-subtle">
@@ -21,6 +26,7 @@ export default async function AdminMerchantsPage() {
               <th className="p-3">Orders</th>
               <th className="p-3">Courier rating</th>
               <th className="p-3">Avg pickup wait</th>
+              <th className="p-3">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -52,11 +58,14 @@ export default async function AdminMerchantsPage() {
                     );
                   })()}
                 </td>
+                <td className="p-3">
+                  <AdminDeleteButton resource="merchants" id={m!.id} label={m!.businessName} />
+                </td>
               </tr>
             ))}
             {!merchants.length && (
               <tr>
-                <td className="p-3 text-fg-subtle" colSpan={6}>
+                <td className="p-3 text-fg-subtle" colSpan={7}>
                   No merchants yet.
                 </td>
               </tr>

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { listCouriers } from "@/lib/repo";
 import AutoRefresh from "@/components/AutoRefresh";
+import DownloadCsvButton from "@/components/DownloadCsvButton";
+import AdminDeleteButton from "@/components/AdminDeleteButton";
 
 export default async function AdminCouriersPage() {
   const user = await getSessionUser();
@@ -12,7 +14,10 @@ export default async function AdminCouriersPage() {
   return (
     <div className="space-y-4">
       <AutoRefresh intervalMs={10000} />
-      <h1 className="text-2xl font-bold">Couriers</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Couriers</h1>
+        <DownloadCsvButton href="/api/admin/couriers/export" />
+      </div>
       <div className="overflow-x-auto rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
           <thead className="text-fg-subtle">
@@ -24,6 +29,7 @@ export default async function AdminCouriersPage() {
               <th className="p-3">Background check</th>
               <th className="p-3">Deliveries</th>
               <th className="p-3">Status</th>
+              <th className="p-3">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -42,11 +48,14 @@ export default async function AdminCouriersPage() {
                     <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">○ Offline</span>
                   )}
                 </td>
+                <td className="p-3">
+                  <AdminDeleteButton resource="couriers" id={c!.id} label={c!.email} />
+                </td>
               </tr>
             ))}
             {!couriers.length && (
               <tr>
-                <td className="p-3 text-fg-subtle" colSpan={7}>
+                <td className="p-3 text-fg-subtle" colSpan={8}>
                   No couriers yet.
                 </td>
               </tr>
