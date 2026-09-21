@@ -2,10 +2,10 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
 /**
- * Role-based route protection for the three internal portals.
+ * Role-based route protection for the four internal portals.
  * Public routes (/, /track/*, /login, /api/orders POST for webhooks) are
- * left open — everything under /merchant, /driver, /admin requires a
- * signed-in user with the matching role.
+ * left open — everything under /merchant, /driver, /admin, /customer
+ * requires a signed-in user with the matching role.
  */
 export default withAuth(
   function middleware(req) {
@@ -21,6 +21,9 @@ export default withAuth(
     if (pathname.startsWith("/admin") && role !== "ADMIN") {
       return NextResponse.redirect(new URL("/login", req.url));
     }
+    if (pathname.startsWith("/customer") && role !== "CUSTOMER") {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
     return NextResponse.next();
   },
   {
@@ -31,5 +34,5 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/merchant/:path*", "/driver/:path*", "/admin/:path*"],
+  matcher: ["/merchant/:path*", "/driver/:path*", "/admin/:path*", "/customer/:path*"],
 };

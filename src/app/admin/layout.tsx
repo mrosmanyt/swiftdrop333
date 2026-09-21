@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import PortalSidebar, { type SidebarLink } from "@/components/portal/PortalSidebar";
+import PushOptIn from "@/components/PushOptIn";
 
 /**
  * The admin console is internal-only: it is never linked from the public
@@ -39,6 +40,7 @@ const GROUPS: { title: string; links: SidebarLink[] }[] = [
       { href: "/admin/applications", label: "Applications", icon: <Icon d="M9 12l2 2 4-4M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> },
       { href: "/admin/operations", label: "Operations", icon: <Icon d="M12 2l2.4 4.8L20 8l-4 3.9.9 5.6L12 15l-4.9 2.5.9-5.6L4 8l5.6-1.2z" /> },
       { href: "/admin/support", label: "Trust & support", icon: <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /> },
+      { href: "/admin/safety", label: "Rider safety", icon: <Icon d="M12 2l8 4v5c0 5.5-3.5 9-8 11-4.5-2-8-5.5-8-11V6z M9.5 12l1.8 1.8L15 10" /> },
       { href: "/admin/notifications", label: "Notifications", icon: <Icon d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /> },
     ],
   },
@@ -61,7 +63,12 @@ const GROUPS: { title: string; links: SidebarLink[] }[] = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <PortalSidebar brand="Admin" homeHref="/admin/dashboard" groups={GROUPS} />
+      <PortalSidebar
+        brand="Admin"
+        homeHref="/admin/dashboard"
+        groups={GROUPS}
+        headerExtra={<PushOptIn label="SOS alerts" />}
+      />
       {/* md:ml-56 matches the sidebar's fixed width so content never sits
           underneath it; on phones there's no sidebar to offset. */}
       <main className="px-4 py-8 sm:px-6 md:ml-56">

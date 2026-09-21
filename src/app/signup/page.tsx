@@ -16,7 +16,7 @@ export default function SignupChoicePage() {
         </>
       }
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Link
           href="/signup/merchant"
           className="group rounded-xl border border-line bg-bg p-5 transition hover:border-accent"
@@ -36,6 +36,17 @@ export default function SignupChoicePage() {
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-muted">
             Earn on your own schedule by bike, scooter, car or van. You&apos;ll upload your
             documents after signing up.
+          </p>
+        </Link>
+
+        <Link
+          href="/signup/customer"
+          className="group rounded-xl border border-line bg-bg p-5 transition hover:border-accent"
+        >
+          <span className="text-[15px] font-semibold text-fg">I receive deliveries</span>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-fg-muted">
+            Track your orders in one place, save addresses, and earn loyalty points on every
+            delivery.
           </p>
         </Link>
       </div>

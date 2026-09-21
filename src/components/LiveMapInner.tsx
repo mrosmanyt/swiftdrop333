@@ -9,7 +9,9 @@ export interface MapMarker {
   lat: number;
   lng: number;
   label: string;
-  kind?: "courier" | "pickup" | "dropoff";
+  kind?: "courier" | "pickup" | "dropoff" | "heat";
+  /** "heat" markers only — 0..1, how busy this spot is relative to the busiest one on the map. Drives both size and color. */
+  intensity?: number;
 }
 
 interface Props {
@@ -77,6 +79,23 @@ export default function LiveMapInner({ markers, height = 320, autoFit = true }: 
             .addTo(map);
           markerLayerRef.current.set(m.id, marker);
         }
+      } else if (m.kind === "heat") {
+        // A soft, large, low-opacity circle reads as "busy area" at a
+        // glance without needing a real heatmap tile layer — radius and
+        // color both scale with intensity so hottest zones jump out.
+        if (existing) map.removeLayer(existing);
+        const t = Math.max(0, Math.min(1, m.intensity ?? 0));
+        const color = t > 0.66 ? "#E5484D" : t > 0.33 ? "#F5A623" : "#F5D90A";
+        const marker = L.circleMarker(latlng, {
+          radius: 18 + t * 32,
+          color,
+          weight: 0,
+          fillColor: color,
+          fillOpacity: 0.35 + t * 0.25,
+        })
+          .bindTooltip(m.label, { permanent: false })
+          .addTo(map);
+        markerLayerRef.current.set(m.id, marker);
       } else {
         if (existing && existing instanceof L.Marker) {
           existing.setLatLng(latlng);

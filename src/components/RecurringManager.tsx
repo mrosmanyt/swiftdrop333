@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card, EmptyState, TableWrap } from "@/components/portal/ui";
 
 interface Zone {
   id: string;
@@ -9,6 +10,28 @@ interface Zone {
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** The next calendar date this schedule will actually fire on, given today and its days-of-week — so "Mon/Wed/Fri" becomes something a merchant can plan around instead of mental math. */
+function nextRunDate(daysOfWeek: string): string {
+  const days = String(daysOfWeek)
+    .split(",")
+    .map(Number)
+    .filter((n) => !Number.isNaN(n));
+  if (!days.length) return "—";
+  const today = new Date();
+  for (let offset = 0; offset < 8; offset++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + offset);
+    if (days.includes(d.getDay())) {
+      return offset === 0
+        ? "Today"
+        : offset === 1
+          ? "Tomorrow"
+          : d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    }
+  }
+  return "—";
+}
 
 /** Standing deliveries — e.g. a pharmacy sending to the same address every
  *  Mon/Wed/Fri. Orders are generated automatically on those days. */
@@ -88,6 +111,9 @@ export default function RecurringManager({ zones, defaultPickup }: { zones: Zone
           {open ? "Cancel" : "+ New schedule"}
         </button>
       </div>
+      <p className="mb-3 text-[13px] text-fg-muted">
+        Standing orders — set it once and a fresh delivery goes out automatically on the days you pick.
+      </p>
 
       {open && (
         <form onSubmit={create} className="mb-3 space-y-3 rounded-xl border border-line bg-surface p-4">
@@ -152,49 +178,60 @@ export default function RecurringManager({ zones, defaultPickup }: { zones: Zone
         </form>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-        <table className="w-full text-left text-sm">
-          <thead className="text-fg-subtle">
-            <tr>
-              <th className="p-3">Label</th>
-              <th className="p-3">Customer</th>
-              <th className="p-3">Days</th>
-              <th className="p-3">Last generated</th>
-              <th className="p-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {schedules.map((s) => (
-              <tr key={s.id} className="border-t border-line">
-                <td className="p-3">{s.label}</td>
-                <td className="p-3 text-xs">{s.customer_name}</td>
-                <td className="p-3 text-xs">
-                  {String(s.days_of_week)
-                    .split(",")
-                    .map((d: string) => DAYS[Number(d)])
-                    .join(", ")}
-                </td>
-                <td className="p-3 text-xs text-fg-subtle">{s.last_generated_date ?? "—"}</td>
-                <td className="p-3 text-right">
-                  <button
-                    onClick={() => toggleActive(s.id, !s.active)}
-                    className={`text-xs hover:underline ${s.active ? "text-danger" : "text-ok"}`}
-                  >
-                    {s.active ? "Pause" : "Resume"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!schedules.length && (
-              <tr>
-                <td className="p-3 text-fg-subtle" colSpan={5}>
-                  No recurring schedules yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Card bodyClassName="">
+        {schedules.length ? (
+          <TableWrap>
+            <table className="w-full text-left text-sm">
+              <thead className="text-[12.5px] uppercase tracking-wide text-fg-subtle">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2.5 font-medium">Label</th>
+                  <th className="px-4 py-2.5 font-medium">Customer</th>
+                  <th className="px-4 py-2.5 font-medium">Days</th>
+                  <th className="px-4 py-2.5 font-medium">Next delivery</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {schedules.map((s) => (
+                  <tr key={s.id} className="border-b border-line last:border-0 hover:bg-fg/[0.02]">
+                    <td className="px-4 py-3 font-medium text-fg">{s.label}</td>
+                    <td className="px-4 py-3 text-fg-muted">{s.customer_name}</td>
+                    <td className="px-4 py-3 text-fg-muted">
+                      {String(s.days_of_week)
+                        .split(",")
+                        .map((d: string) => DAYS[Number(d)])
+                        .join(", ")}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-fg">
+                      {s.active ? nextRunDate(s.days_of_week) : "Paused"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          s.active ? "bg-ok-soft text-ok" : "bg-surface-2 text-fg-muted"
+                        }`}
+                      >
+                        {s.active ? "Active" : "Paused"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      <button
+                        onClick={() => toggleActive(s.id, !s.active)}
+                        className={`text-[13px] hover:underline ${s.active ? "text-danger" : "text-accent"}`}
+                      >
+                        {s.active ? "Pause" : "Resume"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        ) : (
+          <EmptyState title="No recurring schedules yet" hint="Set one up above for a customer who orders on a regular pattern." />
+        )}
+      </Card>
     </div>
   );
 }

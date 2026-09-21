@@ -33,7 +33,17 @@ export default function LoginPage() {
       setError("Invalid email or password.");
       return;
     }
-    window.location.href = "/";
+
+    // Each role has its own home screen — a customer landing on the
+    // marketing page after signing in would just look broken.
+    const session = await fetch("/api/auth/session").then((r) => r.json()).catch(() => null);
+    const role = session?.user?.role;
+    const dest =
+      role === "MERCHANT" ? "/merchant/dashboard" :
+      role === "COURIER" ? "/driver/offers" :
+      role === "ADMIN" ? "/admin" :
+      role === "CUSTOMER" ? "/customer" : "/";
+    window.location.href = dest;
   }
 
   return (

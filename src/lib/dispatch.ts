@@ -4,7 +4,10 @@ import {
   expireStaleOffers,
   getActiveOfferForOrder,
   getOrderById,
+  maybeCreateSurgeAlert,
+  onlineCourierUserIds,
   ordersNeedingDispatch,
+  pendingCountsByZone,
   setOrderDispatchMode,
   setOrderRouteInfo,
 } from "@/lib/repo";
@@ -112,8 +115,36 @@ export function runDispatchTick() {
     else if (result.reason?.includes("broadcast")) broadcast++;
   }
 
+  checkSurgeZones();
+
   return { expired, considered: pending.length, offered, broadcast };
 }
+
+/**
+ * Smart incentives — no admin has to notice a zone backing up. Every tick,
+ * each zone's current backlog is checked against the threshold; crossing it
+ * for the first time (maybeCreateSurgeAlert is a no-op while an alert for
+ * that zone is still live) creates a time-limited bonus and pushes every
+ * online courier so the backlog actually gets seen, not just logged.
+ */
+function checkSurgeZones() {
+  for (const { zoneId, waitingCount } of pendingCountsByZone()) {
+    const alert = maybeCreateSurgeAlert(zoneId, waitingCount);
+    if (!alert) continue;
+
+    const courierUserIds = onlineCourierUserIds();
+    for (const userId of courierUserIds) {
+      void pushToUser(userId, {
+        title: `Surge — ${alert.zoneName}`,
+        body: `${waitingCount} deliveries waiting. Extra $${(alert.bonusCents / 100).toFixed(2)} per drop for the next ${SURGE_ALERT_MINUTES} min.`,
+        url: "/driver/demand",
+        tag: "surge",
+      }).catch(() => {});
+    }
+  }
+}
+
+const SURGE_ALERT_MINUTES = Number(process.env.SURGE_ALERT_TTL_MINUTES ?? 30);
 
 /**
  * Compute and store real route distance + ETA for an order. Called after

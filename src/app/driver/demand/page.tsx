@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
-import { getCourierProfileByUserId, demandHeatmap, demandByHour } from "@/lib/repo";
+import { getCourierProfileByUserId, demandHeatmap, demandByHour, listActiveSurgeAlerts } from "@/lib/repo";
 import { courierBlockReason } from "@/lib/guards";
 import BatchRoutes from "@/components/BatchRoutes";
+import DemandMap from "@/components/DemandMap";
 
 export default async function DriverDemandPage() {
   const user = await getSessionUser();
@@ -21,6 +22,7 @@ export default async function DriverDemandPage() {
   const zones = demandHeatmap(24);
   const byHour = demandByHour(7);
   const peak = Math.max(1, ...byHour.map((h) => h.orderCount));
+  const surgeAlerts = listActiveSurgeAlerts();
 
   return (
     <div className="space-y-8">
@@ -28,6 +30,26 @@ export default async function DriverDemandPage() {
         <h1 className="text-2xl font-bold">Where the work is</h1>
         <p className="text-sm text-fg-muted">Last 24 hours of demand, by zone.</p>
       </div>
+
+      {surgeAlerts.length > 0 && (
+        <div className="space-y-2">
+          {surgeAlerts.map((a) => (
+            <div
+              key={a.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-warn/30 bg-warn-soft p-3 text-sm text-warn"
+            >
+              <span>
+                <strong>Surge — {a.city} · {a.zoneName}</strong>: {a.waitingCount} deliveries waiting right now.
+              </span>
+              <span className="whitespace-nowrap font-semibold">
+                +${(a.bonusCents / 100).toFixed(2)}/drop until {new Date(a.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <DemandMap zones={zones as any} />
 
       <div className="space-y-2">
         {zones.map((z) => {

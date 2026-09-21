@@ -8,7 +8,7 @@ import { computeCourierTier } from "@/lib/pricing";
  * place to swap SQLite for Postgres later without touching route/page code.
  */
 
-export type Role = "MERCHANT" | "COURIER" | "ADMIN";
+export type Role = "MERCHANT" | "COURIER" | "ADMIN" | "CUSTOMER";
 export type ServiceType = "NEXT_DAY" | "SAME_DAY" | "DIRECT" | "BATCH";
 export type OrderStatus =
   | "PENDING"
@@ -358,6 +358,8 @@ function mapCourier(r: any) {
     lastLat: r.last_lat,
     lastLng: r.last_lng,
     lastLocationAt: r.last_location_at,
+    emergencyContactName: r.emergency_contact_name ?? null,
+    emergencyContactPhone: r.emergency_contact_phone ?? null,
     createdAt: r.created_at,
     email: r.email,
     userStatus: r.user_status,
@@ -931,6 +933,8 @@ export function markOrderDelivered(orderId: string, courierId: string, proofUrl:
   if (result.changes > 0) {
     logEvent(orderId, "status_change", { status: "DELIVERED" });
     refreshCourierTier(courierId);
+    const order = getOrderById(orderId);
+    if (order) awardLoyaltyPointsForOrder(order);
   }
   return result.changes > 0;
 }
@@ -2131,4 +2135,450 @@ export function opsSummary() {
     grossTodayCents: (revenue?.gross ?? 0) as number,
     platformTodayCents: (revenue?.net ?? 0) as number,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Customer accounts & loyalty
+//
+// Orders are booked by merchants on behalf of a customer — there's no
+// customer_user_id on the orders table (see the schema note in db.ts). A
+// CUSTOMER account therefore isn't the thing that *creates* orders, it's a
+// layer on top: sign in, see every past delivery that was sent to your
+// email/phone, save addresses for next time, and track loyalty points +
+// referrals. Matching is done on contact info, not a foreign key.
+// ---------------------------------------------------------------------------
+
+function generateReferralCode(): string {
+  for (let i = 0; i < 10; i++) {
+    const code = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+    const exists = db.prepare(`SELECT 1 FROM loyalty_accounts WHERE referral_code = ?`).get(code);
+    if (!exists) return code;
+  }
+  // Astronomically unlikely to be reached, but never loop forever.
+  return randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+}
+
+function mapLoyaltyAccount(r: any) {
+  if (!r) return null;
+  return {
+    userId: r.user_id,
+    points: r.points,
+    referralCode: r.referral_code,
+    referredByUserId: r.referred_by_user_id,
+    createdAt: r.created_at,
+  };
+}
+
+/** Creates the loyalty account row a CUSTOMER user needs from day one — every CUSTOMER gets one at signup. */
+export function createLoyaltyAccount(userId: string, referredByUserId?: string | null) {
+  const code = generateReferralCode();
+  db.prepare(
+    `INSERT INTO loyalty_accounts (user_id, points, referral_code, referred_by_user_id, created_at)
+     VALUES (?, 0, ?, ?, ?)`
+  ).run(userId, code, referredByUserId ?? null, now());
+  return code;
+}
+
+export function getLoyaltyAccount(userId: string) {
+  return mapLoyaltyAccount(db.prepare(`SELECT * FROM loyalty_accounts WHERE user_id = ?`).get(userId));
+}
+
+export function getLoyaltyAccountByReferralCode(code: string) {
+  return mapLoyaltyAccount(
+    db.prepare(`SELECT * FROM loyalty_accounts WHERE referral_code = ?`).get(code.trim().toUpperCase())
+  );
+}
+
+/** Adds (or, with a negative amount, deducts) points and records why. Self-heals a missing account instead of throwing. */
+export function addLoyaltyPoints(userId: string, points: number, reason: string, orderId?: string) {
+  if (!points) return;
+  if (!getLoyaltyAccount(userId)) createLoyaltyAccount(userId);
+  db.prepare(`UPDATE loyalty_accounts SET points = points + ? WHERE user_id = ?`).run(points, userId);
+  db.prepare(
+    `INSERT INTO loyalty_transactions (id, user_id, order_id, points, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id(), userId, orderId ?? null, points, reason, now());
+}
+
+export function listLoyaltyTransactions(userId: string, limit = 50) {
+  return db
+    .prepare(`SELECT * FROM loyalty_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`)
+    .all(userId, limit)
+    .map((r: any) => ({
+      id: r.id,
+      userId: r.user_id,
+      orderId: r.order_id,
+      points: r.points,
+      reason: r.reason,
+      createdAt: r.created_at,
+    }));
+}
+
+function findCustomerByContact(email?: string | null, phone?: string | null) {
+  if (email) {
+    const u = mapUser(
+      db.prepare(`SELECT * FROM users WHERE role = 'CUSTOMER' AND email = ?`).get(email.trim().toLowerCase())
+    );
+    if (u) return u;
+  }
+  if (phone) {
+    const u = mapUser(db.prepare(`SELECT * FROM users WHERE role = 'CUSTOMER' AND phone = ?`).get(phone));
+    if (u) return u;
+  }
+  return null;
+}
+
+/** 1 point per dollar spent (min 1), credited automatically the moment an order is marked delivered — only if the guest's email/phone matches a registered CUSTOMER account. */
+export function awardLoyaltyPointsForOrder(order: { id: string; customerEmail?: string | null; customerPhone?: string | null; priceCents: number }) {
+  const customer = findCustomerByContact(order.customerEmail, order.customerPhone);
+  if (!customer) return;
+  const points = Math.max(1, Math.round((order.priceCents ?? 0) / 100));
+  addLoyaltyPoints(customer.id, points, "order_delivered", order.id);
+}
+
+/** Creates a CUSTOMER user + their loyalty account, and applies a referral bonus on both sides when a valid code is given. */
+export function createCustomerUser(input: {
+  email: string;
+  phone?: string;
+  fullName?: string;
+  passwordHash: string;
+  referralCode?: string;
+}) {
+  const userId = createUser({
+    email: input.email,
+    phone: input.phone,
+    fullName: input.fullName,
+    passwordHash: input.passwordHash,
+    role: "CUSTOMER",
+  });
+
+  let referredBy: string | null = null;
+  if (input.referralCode) {
+    const referrer = getLoyaltyAccountByReferralCode(input.referralCode);
+    if (referrer && referrer.userId !== userId) referredBy = referrer.userId;
+  }
+
+  createLoyaltyAccount(userId, referredBy);
+  if (referredBy) {
+    addLoyaltyPoints(userId, 50, "referred_signup_bonus");
+    addLoyaltyPoints(referredBy, 100, "referral_bonus");
+  }
+
+  return userId;
+}
+
+function mapCustomerAddress(r: any) {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    label: r.label,
+    address: r.address,
+    lat: r.lat,
+    lng: r.lng,
+    isDefault: !!r.is_default,
+    createdAt: r.created_at,
+  };
+}
+
+export function createCustomerAddress(userId: string, input: { label?: string; address: string; lat?: number | null; lng?: number | null; isDefault?: boolean }) {
+  const addrId = id();
+  if (input.isDefault) db.prepare(`UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?`).run(userId);
+  db.prepare(
+    `INSERT INTO customer_addresses (id, user_id, label, address, lat, lng, is_default, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(addrId, userId, input.label?.trim() || "Home", input.address, input.lat ?? null, input.lng ?? null, input.isDefault ? 1 : 0, now());
+  return addrId;
+}
+
+export function listCustomerAddresses(userId: string) {
+  return db
+    .prepare(`SELECT * FROM customer_addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC`)
+    .all(userId)
+    .map(mapCustomerAddress);
+}
+
+export function deleteCustomerAddress(addressId: string, userId: string) {
+  return db.prepare(`DELETE FROM customer_addresses WHERE id = ? AND user_id = ?`).run(addressId, userId).changes > 0;
+}
+
+export function setDefaultCustomerAddress(addressId: string, userId: string) {
+  db.prepare(`UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?`).run(userId);
+  return (
+    db.prepare(`UPDATE customer_addresses SET is_default = 1 WHERE id = ? AND user_id = ?`).run(addressId, userId)
+      .changes > 0
+  );
+}
+
+/** Every past delivery sent to this customer's email or phone — the only link between a guest order and an account. */
+export function listOrdersForCustomer(contact: { email?: string | null; phone?: string | null }, limit = 100) {
+  const email = contact.email?.trim().toLowerCase() ?? "";
+  const phone = contact.phone ?? "";
+  return db
+    .prepare(
+      `SELECT o.*, m.business_name as merchant_business_name
+       FROM orders o
+       LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
+       WHERE o.deleted_at IS NULL
+         AND ((? != '' AND LOWER(o.customer_email) = ?) OR (? != '' AND o.customer_phone = ?))
+       ORDER BY o.created_at DESC
+       LIMIT ?`
+    )
+    .all(email, email, phone, phone, limit)
+    .map((r: any) => ({ ...mapOrder(r), merchantBusinessName: r.merchant_business_name }));
+}
+
+// ---------------------------------------------------------------------------
+// Merchant analytics — revenue trend, top customers, success rate, and a
+// cost breakdown by service type, all scoped to one merchant's own orders.
+// ---------------------------------------------------------------------------
+
+export function merchantAnalytics(merchantId: string, days = 14) {
+  const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
+
+  const dailySeries = db
+    .prepare(
+      `SELECT date(created_at) as date,
+              COUNT(*) as orders,
+              COALESCE(SUM(price_cents), 0) as revenueCents,
+              SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as delivered
+       FROM orders
+       WHERE merchant_id = ? AND deleted_at IS NULL AND created_at >= ?
+       GROUP BY date(created_at)
+       ORDER BY date ASC`
+    )
+    .all(merchantId, since)
+    .map(toPlain) as any[];
+
+  const topCustomers = db
+    .prepare(
+      `SELECT customer_name as customerName,
+              COUNT(*) as orderCount,
+              COALESCE(SUM(price_cents), 0) as spentCents
+       FROM orders
+       WHERE merchant_id = ? AND deleted_at IS NULL
+       GROUP BY customer_name
+       ORDER BY spentCents DESC
+       LIMIT 8`
+    )
+    .all(merchantId)
+    .map(toPlain) as any[];
+
+  const outcomes = db
+    .prepare(
+      `SELECT status, COUNT(*) as c FROM orders
+       WHERE merchant_id = ? AND deleted_at IS NULL AND status IN ('DELIVERED','FAILED','RETURNED','CANCELLED')
+       GROUP BY status`
+    )
+    .all(merchantId)
+    .map(toPlain) as { status: string; c: number }[];
+  const delivered = outcomes.find((o) => o.status === "DELIVERED")?.c ?? 0;
+  const terminal = outcomes.reduce((sum, o) => sum + o.c, 0);
+  const successRate = terminal > 0 ? Math.round((delivered / terminal) * 1000) / 10 : null;
+
+  const serviceBreakdown = db
+    .prepare(
+      `SELECT service_type as serviceType,
+              COUNT(*) as orderCount,
+              COALESCE(SUM(price_cents), 0) as revenueCents
+       FROM orders
+       WHERE merchant_id = ? AND deleted_at IS NULL
+       GROUP BY service_type
+       ORDER BY revenueCents DESC`
+    )
+    .all(merchantId)
+    .map(toPlain) as any[];
+
+  return { dailySeries, topCustomers, successRate, delivered, terminal, serviceBreakdown };
+}
+
+// ---------------------------------------------------------------------------
+// Smart incentives — automatic surge bonuses. The dispatch tick calls
+// maybeCreateSurgeAlert() for every zone it sees; this decides on its own
+// whether that zone's backlog deserves a fresh alert (and won't spam one if
+// an unexpired alert is already live for that zone).
+// ---------------------------------------------------------------------------
+
+const SURGE_WAITING_THRESHOLD = Number(process.env.SURGE_WAITING_THRESHOLD ?? 3);
+const SURGE_BONUS_CENTS = Number(process.env.SURGE_BONUS_CENTS ?? 500);
+const SURGE_ALERT_TTL_MINUTES = Number(process.env.SURGE_ALERT_TTL_MINUTES ?? 30);
+
+export function listActiveSurgeAlerts() {
+  return db
+    .prepare(
+      `SELECT sa.*, z.name as zone_name, z.city as city
+       FROM surge_alerts sa JOIN zones z ON z.id = sa.zone_id
+       WHERE sa.expires_at > ?
+       ORDER BY sa.waiting_count DESC`
+    )
+    .all(now())
+    .map((r: any) => ({
+      id: r.id,
+      zoneId: r.zone_id,
+      zoneName: r.zone_name,
+      city: r.city,
+      waitingCount: r.waiting_count,
+      bonusCents: r.bonus_cents,
+      expiresAt: r.expires_at,
+      createdAt: r.created_at,
+    }));
+}
+
+/** Called from the dispatch tick with each zone's current waiting count. Returns the new alert if one was just created, otherwise null. */
+export function maybeCreateSurgeAlert(zoneId: string, waitingCount: number) {
+  if (waitingCount < SURGE_WAITING_THRESHOLD) return null;
+
+  const existing = db
+    .prepare(`SELECT 1 FROM surge_alerts WHERE zone_id = ? AND expires_at > ?`)
+    .get(zoneId, now());
+  if (existing) return null;
+
+  const alertId = id();
+  const expiresAt = new Date(Date.now() + SURGE_ALERT_TTL_MINUTES * 60_000).toISOString();
+  db.prepare(
+    `INSERT INTO surge_alerts (id, zone_id, waiting_count, bonus_cents, expires_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(alertId, zoneId, waitingCount, SURGE_BONUS_CENTS, expiresAt, now());
+
+  const zone = getZoneById(zoneId);
+  return { id: alertId, zoneId, zoneName: zone?.name, city: zone?.city, waitingCount, bonusCents: SURGE_BONUS_CENTS, expiresAt };
+}
+
+/** Every currently-online courier's userId — who a surge push should reach. */
+export function onlineCourierUserIds(): string[] {
+  return db
+    .prepare(`SELECT user_id FROM courier_profiles WHERE is_online = 1 AND deleted_at IS NULL`)
+    .all()
+    .map((r: any) => r.user_id);
+}
+
+/** Zones with at least one order still waiting for a courier right now — the input maybeCreateSurgeAlert acts on. */
+export function pendingCountsByZone() {
+  return db
+    .prepare(
+      `SELECT zone_id as zoneId, COUNT(*) as waitingCount
+       FROM orders
+       WHERE status = 'PENDING' AND deleted_at IS NULL AND zone_id IS NOT NULL
+       GROUP BY zone_id`
+    )
+    .all()
+    .map(toPlain) as { zoneId: string; waitingCount: number }[];
+}
+
+// ---------------------------------------------------------------------------
+// Rider safety — emergency contact, SOS incidents, and short-lived
+// unauthenticated "share my live location" links.
+// ---------------------------------------------------------------------------
+
+export function setCourierEmergencyContact(courierId: string, name: string, phone: string) {
+  db.prepare(`UPDATE courier_profiles SET emergency_contact_name = ?, emergency_contact_phone = ? WHERE id = ?`).run(
+    name,
+    phone,
+    courierId
+  );
+}
+
+export function adminUserIds(): string[] {
+  return db
+    .prepare(`SELECT id FROM users WHERE role = 'ADMIN' AND status = 'active'`)
+    .all()
+    .map((r: any) => r.id);
+}
+
+function mapSafetyIncident(r: any) {
+  return {
+    id: r.id,
+    courierId: r.courier_id,
+    orderId: r.order_id,
+    lat: r.lat,
+    lng: r.lng,
+    note: r.note,
+    status: r.status,
+    createdAt: r.created_at,
+    resolvedAt: r.resolved_at,
+    resolvedBy: r.resolved_by,
+    courierFullName: r.courier_full_name,
+    courierPhone: r.courier_phone,
+    courierEmail: r.courier_email,
+  };
+}
+
+/** Records an SOS press. Returns the incident so the caller can push-notify with its id/location. */
+export function createSafetyIncident(input: { courierId: string; orderId?: string | null; lat?: number | null; lng?: number | null; note?: string | null }) {
+  const incidentId = id();
+  db.prepare(
+    `INSERT INTO safety_incidents (id, courier_id, order_id, lat, lng, note, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`
+  ).run(incidentId, input.courierId, input.orderId ?? null, input.lat ?? null, input.lng ?? null, input.note ?? null, now());
+  return incidentId;
+}
+
+export function listOpenSafetyIncidents() {
+  return db
+    .prepare(
+      `SELECT si.*, cp.full_name as courier_full_name, cp.phone as courier_phone, u.email as courier_email
+       FROM safety_incidents si
+       JOIN courier_profiles cp ON cp.id = si.courier_id
+       JOIN users u ON u.id = cp.user_id
+       WHERE si.status != 'resolved'
+       ORDER BY si.created_at DESC`
+    )
+    .all()
+    .map(mapSafetyIncident);
+}
+
+export function resolveSafetyIncident(incidentId: string, adminUserId: string) {
+  return (
+    db
+      .prepare(`UPDATE safety_incidents SET status = 'resolved', resolved_at = ?, resolved_by = ? WHERE id = ?`)
+      .run(now(), adminUserId, incidentId).changes > 0
+  );
+}
+
+function generateShareToken(): string {
+  return randomUUID().replace(/-/g, "");
+}
+
+/** A courier-initiated link, valid for `minutes`, that shows their live position to whoever holds it — no login required. */
+export function createLocationShare(courierId: string, minutes = 60) {
+  const shareId = id();
+  const token = generateShareToken();
+  const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
+  db.prepare(`INSERT INTO location_shares (id, token, courier_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`).run(
+    shareId,
+    token,
+    courierId,
+    expiresAt,
+    now()
+  );
+  return { token, expiresAt };
+}
+
+export function getActiveLocationShare(token: string) {
+  const r = db.prepare(`SELECT * FROM location_shares WHERE token = ? AND expires_at > ?`).get(token, now()) as any;
+  if (!r) return null;
+  return { id: r.id, courierId: r.courier_id, expiresAt: r.expires_at, createdAt: r.created_at };
+}
+
+// ---------------------------------------------------------------------------
+// Chat — per-role read state (for "seen" receipts). Typing indicators are
+// deliberately kept out of the database: they're seconds-lived, and a
+// module-level map in lib/typing.ts is all that's needed for a single
+// Next.js instance — no point persisting something that's stale before the
+// write even finishes.
+// ---------------------------------------------------------------------------
+
+/** Marks this role as having read the thread up to now — call this whenever they fetch the thread. */
+export function markMessagesRead(orderId: string, role: string) {
+  db.prepare(
+    `INSERT INTO message_read_state (order_id, role, last_read_at) VALUES (?, ?, ?)
+     ON CONFLICT(order_id, role) DO UPDATE SET last_read_at = excluded.last_read_at`
+  ).run(orderId, role, now());
+}
+
+/** Every role's last-read timestamp for this order's thread, as a lookup map. */
+export function getReadState(orderId: string): Record<string, string> {
+  const rows = db.prepare(`SELECT role, last_read_at FROM message_read_state WHERE order_id = ?`).all(orderId) as {
+    role: string;
+    last_read_at: string;
+  }[];
+  return Object.fromEntries(rows.map((r) => [r.role, r.last_read_at]));
 }

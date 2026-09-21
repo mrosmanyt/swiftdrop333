@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   phone TEXT,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('MERCHANT','COURIER','ADMIN')),
+  role TEXT NOT NULL CHECK(role IN ('MERCHANT','COURIER','ADMIN','CUSTOMER')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -219,6 +219,47 @@ ensureColumn("users", "full_name", "TEXT");
 ensureColumn("users", "status", "TEXT NOT NULL DEFAULT 'active'"); // active | suspended
 ensureColumn("users", "locale", "TEXT NOT NULL DEFAULT 'en'");
 
+/**
+ * The `users.role` CHECK constraint was originally MERCHANT/COURIER/ADMIN
+ * only. SQLite can't ALTER a CHECK constraint in place, so an existing
+ * deployed database (with real rows already in it) needs the table rebuilt
+ * — rename, recreate with the wider constraint, copy every row back, drop
+ * the old one. Foreign keys are other tables referencing *this table's
+ * name*, not its rowid, so they keep working once `users` exists again
+ * under the same name. A brand-new database never hits this: the
+ * CREATE TABLE above already allows CUSTOMER, so `sql` already contains it
+ * and this is a no-op.
+ */
+function ensureCustomerRoleSupported() {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'`)
+    .get() as { sql?: string } | undefined;
+  if (!row?.sql || row.sql.includes("'CUSTOMER'")) return;
+
+  db.exec("PRAGMA foreign_keys = OFF;");
+  db.exec(`
+    ALTER TABLE users RENAME TO users_role_migration_old;
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      phone TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('MERCHANT','COURIER','ADMIN','CUSTOMER')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      full_name TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      locale TEXT NOT NULL DEFAULT 'en'
+    );
+    INSERT INTO users (id, email, phone, password_hash, role, created_at, updated_at, full_name, status, locale)
+      SELECT id, email, phone, password_hash, role, created_at, updated_at, full_name, status, locale
+      FROM users_role_migration_old;
+    DROP TABLE users_role_migration_old;
+  `);
+  db.exec("PRAGMA foreign_keys = ON;");
+}
+ensureCustomerRoleSupported();
+
 ensureColumn("merchant_profiles", "contact_name", "TEXT");
 ensureColumn("merchant_profiles", "business_phone", "TEXT");
 ensureColumn("merchant_profiles", "business_address", "TEXT");
@@ -289,6 +330,11 @@ ensureColumn("courier_profiles", "deleted_at", "TEXT");
 ensureColumn("courier_profiles", "deleted_by", "TEXT");
 ensureColumn("orders", "deleted_at", "TEXT");
 ensureColumn("orders", "deleted_by", "TEXT");
+
+// --- Step 7: rider safety — emergency contact on file, so an SOS or a
+// shared-location link has somewhere real to point.
+ensureColumn("courier_profiles", "emergency_contact_name", "TEXT");
+ensureColumn("courier_profiles", "emergency_contact_phone", "TEXT");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS support_tickets (
@@ -483,4 +529,94 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_push_subject ON push_subscriptions(subject_type, subject_id);
+
+-- Customer accounts & loyalty. A CUSTOMER user is still matched to their
+-- past guest orders by email/phone (orders have no customer_user_id — see
+-- the note on the orders table), so an address book and loyalty balance is
+-- everything an account actually needs to add on top of that.
+CREATE TABLE IF NOT EXISTS customer_addresses (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  label TEXT NOT NULL DEFAULT 'Home',
+  address TEXT NOT NULL,
+  lat REAL,
+  lng REAL,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_user ON customer_addresses(user_id);
+
+CREATE TABLE IF NOT EXISTS loyalty_accounts (
+  user_id TEXT PRIMARY KEY REFERENCES users(id),
+  points INTEGER NOT NULL DEFAULT 0,
+  referral_code TEXT NOT NULL UNIQUE,
+  referred_by_user_id TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS loyalty_transactions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  order_id TEXT REFERENCES orders(id),
+  points INTEGER NOT NULL,       -- positive = earned, negative = redeemed
+  reason TEXT NOT NULL,          -- order_delivered | referral_bonus | referred_signup_bonus | redeemed
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_loyalty_tx_user ON loyalty_transactions(user_id, created_at);
+
+-- Smart incentives: when a zone's pending-order count crosses a threshold,
+-- the dispatch tick (lib/dispatch.ts) auto-creates one of these and pushes
+-- every online courier — nobody has to notice the queue building up and
+-- manually spin up a bonus. One open alert per zone at a time; it expires
+-- on its own (short-lived, matches how fast demand spikes actually move).
+CREATE TABLE IF NOT EXISTS surge_alerts (
+  id TEXT PRIMARY KEY,
+  zone_id TEXT NOT NULL REFERENCES zones(id),
+  waiting_count INTEGER NOT NULL,
+  bonus_cents INTEGER NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_surge_alerts_zone ON surge_alerts(zone_id, expires_at);
+
+-- Rider safety: an SOS press creates one of these -- courier_id and a best-
+-- effort last known position, order_id when they were mid-delivery. Kept
+-- separate from the disputes table (which is always order-scoped and
+-- billing-flavoured) because a safety event can happen with no order at all.
+CREATE TABLE IF NOT EXISTS safety_incidents (
+  id TEXT PRIMARY KEY,
+  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),
+  order_id TEXT REFERENCES orders(id),
+  lat REAL,
+  lng REAL,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'open',   -- open | acknowledged | resolved
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT,
+  resolved_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_safety_incidents_status ON safety_incidents(status, created_at);
+
+-- A short-lived, unauthenticated "share my location" link — the courier
+-- generates one and texts it to whoever they want watching over them; no
+-- account needed to view it, same trust model as the customer tracking
+-- link. Expires on its own.
+CREATE TABLE IF NOT EXISTS location_shares (
+  id TEXT PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_location_shares_token ON location_shares(token);
+
+-- Per-role read state for an order's chat thread — up to four roles
+-- (customer/courier/merchant/admin) share one thread, so "seen" is tracked
+-- per role rather than per message.
+CREATE TABLE IF NOT EXISTS message_read_state (
+  order_id TEXT NOT NULL REFERENCES orders(id),
+  role TEXT NOT NULL,
+  last_read_at TEXT NOT NULL,
+  PRIMARY KEY (order_id, role)
+);
 `);

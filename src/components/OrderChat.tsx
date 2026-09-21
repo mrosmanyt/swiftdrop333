@@ -19,14 +19,20 @@ const ROLE_LABEL: Record<string, string> = {
 /**
  * Per-delivery chat. Nobody's phone number is exposed — the courier and
  * the customer talk here instead ("which buzzer?", "leave it with the
- * concierge"). Polls every 5s so it feels live without a socket server.
+ * concierge"). Polls every 5s so it feels live without a socket server;
+ * that same poll doubles as "I've read up to here" (read receipts) and
+ * carries the typing indicator, so no separate live connection is needed
+ * for either.
  */
 export default function OrderChat({ orderId, compact = false }: { orderId: string; compact?: boolean }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [you, setYou] = useState<string>("customer");
+  const [readState, setReadState] = useState<Record<string, string>>({});
+  const [typingRoles, setTypingRoles] = useState<string[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const lastTypingSentRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +42,8 @@ export default function OrderChat({ orderId, compact = false }: { orderId: strin
       const data = await res.json();
       setMessages(data.messages ?? []);
       setYou(data.you ?? "customer");
+      setReadState(data.readState ?? {});
+      setTypingRoles(data.typing ?? []);
     }
     poll();
     const t = setInterval(poll, 5000);
@@ -48,6 +56,16 @@ export default function OrderChat({ orderId, compact = false }: { orderId: strin
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
+
+  function handleDraftChange(value: string) {
+    setDraft(value);
+    // Throttled — no point pinging on every keystroke, the indicator only
+    // needs to refresh roughly as often as it can go stale (a few seconds).
+    const nowMs = Date.now();
+    if (nowMs - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = nowMs;
+    fetch(`/api/orders/${orderId}/messages/typing`, { method: "POST" }).catch(() => void 0);
+  }
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +88,14 @@ export default function OrderChat({ orderId, compact = false }: { orderId: strin
     }
   }
 
+  // "Seen" only means something for the last message I sent — and only
+  // once someone else's read state has actually caught up to it.
+  const lastMineIndex = [...messages].map((m) => m.senderRole).lastIndexOf(you as any);
+  const lastMine = lastMineIndex >= 0 ? messages[lastMineIndex] : null;
+  const seenByOther =
+    !!lastMine &&
+    Object.entries(readState).some(([role, at]) => role !== you && new Date(at) >= new Date(lastMine.createdAt));
+
   return (
     <div className="rounded-xl border border-line bg-surface">
       <div className="border-b border-line px-4 py-2">
@@ -78,22 +104,28 @@ export default function OrderChat({ orderId, compact = false }: { orderId: strin
       </div>
 
       <div className={`space-y-2 overflow-y-auto p-4 ${compact ? "max-h-48" : "max-h-72"}`}>
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const mine = m.senderRole === you;
+          const isLastMine = mine && i === lastMineIndex;
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                  mine ? "bg-accent-solid text-white" : "bg-surface-2 text-fg"
-                }`}
-              >
-                {!mine && (
-                  <p className="text-[11px] font-medium opacity-70">{ROLE_LABEL[m.senderRole]}</p>
+              <div className="max-w-[80%]">
+                <div
+                  className={`rounded-2xl px-3 py-2 text-sm ${
+                    mine ? "bg-accent-solid text-white" : "bg-surface-2 text-fg"
+                  }`}
+                >
+                  {!mine && (
+                    <p className="text-[11px] font-medium opacity-70">{ROLE_LABEL[m.senderRole]}</p>
+                  )}
+                  <p className="whitespace-pre-wrap">{m.body}</p>
+                  <p className={`mt-0.5 text-[10px] ${mine ? "text-white/70" : "text-fg-subtle"}`}>
+                    {new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </p>
+                </div>
+                {isLastMine && (
+                  <p className="mt-0.5 text-right text-[10px] text-fg-subtle">{seenByOther ? "Seen" : "Sent"}</p>
                 )}
-                <p className="whitespace-pre-wrap">{m.body}</p>
-                <p className={`mt-0.5 text-[10px] ${mine ? "text-white/70" : "text-fg-subtle"}`}>
-                  {new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                </p>
               </div>
             </div>
           );
@@ -101,13 +133,20 @@ export default function OrderChat({ orderId, compact = false }: { orderId: strin
         {!messages.length && (
           <p className="text-sm text-fg-subtle">No messages yet.</p>
         )}
+        {typingRoles.length > 0 && (
+          <div className="flex justify-start">
+            <div className="rounded-2xl bg-surface-2 px-3 py-2 text-xs italic text-fg-subtle">
+              {typingRoles.map((r) => ROLE_LABEL[r] ?? r).join(", ")} typing…
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
       <form onSubmit={sendMessage} className="flex gap-2 border-t border-line p-3">
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => handleDraftChange(e.target.value)}
           placeholder="Type a message…"
           className="flex-1 rounded-lg border border-line px-3 py-2 text-sm"
         />
