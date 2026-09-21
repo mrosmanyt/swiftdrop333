@@ -234,6 +234,32 @@ export async function notifyReturning(order: OrderLike, merchantEmail: string | 
   });
 }
 
+/** Order cancelled before pickup — customer + merchant both need to know. */
+export async function notifyCancelled(order: OrderLike, merchantEmail?: string | null, reason?: string) {
+  const custBody = `Your ${order.merchantBusinessName ?? APP_NAME} delivery to ${order.dropoffAddress} has been cancelled.${
+    reason ? ` Reason: ${reason}` : ""
+  }`;
+  await Promise.all([
+    send({ channel: "sms", to: order.customerPhone ?? "", template: "cancelled", body: custBody, orderId: order.id }),
+    send({
+      channel: "email",
+      to: merchantEmail ?? "",
+      template: "cancelled_merchant",
+      subject: `Order cancelled — ${order.customerName}`,
+      body: `The delivery to ${order.customerName} (${order.dropoffAddress}) was cancelled.${
+        reason ? `\n\nReason: ${reason}` : ""
+      }`,
+      orderId: order.id,
+    }),
+    pushToOrder(order.id, {
+      title: "Order cancelled",
+      body: custBody,
+      url: trackingUrl(order.id),
+      tag: "order-status",
+    }),
+  ]);
+}
+
 /** New chat message waiting for the customer. */
 export async function notifyNewMessage(order: OrderLike, from: string, preview: string) {
   await send({

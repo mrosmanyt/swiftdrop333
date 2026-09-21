@@ -336,6 +336,19 @@ ensureColumn("orders", "deleted_by", "TEXT");
 ensureColumn("courier_profiles", "emergency_contact_name", "TEXT");
 ensureColumn("courier_profiles", "emergency_contact_phone", "TEXT");
 
+// --- Step 8: order cancellation & refunds. Cancelling only ever changes
+// status + these columns — it never deletes anything, so the order stays
+// fully visible in history. refund_status starts 'none' (nothing to refund,
+// e.g. cancelled pre-pickup and never billed) and a cancellation can move it
+// to 'pending' for ops to action from the admin refund queue.
+ensureColumn("orders", "cancelled_at", "TEXT");
+ensureColumn("orders", "cancelled_by", "TEXT"); // user id of whoever cancelled it
+ensureColumn("orders", "cancel_reason", "TEXT");
+ensureColumn("orders", "refund_status", "TEXT NOT NULL DEFAULT 'none'"); // none | pending | refunded | denied
+ensureColumn("orders", "refund_amount_cents", "INTEGER");
+ensureColumn("orders", "refund_note", "TEXT");
+ensureColumn("orders", "refunded_at", "TEXT");
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS support_tickets (
   id TEXT PRIMARY KEY,

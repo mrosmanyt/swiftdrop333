@@ -78,7 +78,12 @@ export default async function AdminOrdersPage() {
                 <td className="p-3 text-xs text-fg-muted">{o!.dispatchMode}</td>
                 <td className="p-3">
                   <div className="flex flex-col items-start gap-2">
-                    <AdminOrderActions orderId={o!.id} status={o!.status} couriers={couriers} />
+                    <AdminOrderActions
+                      orderId={o!.id}
+                      status={o!.status}
+                      couriers={couriers}
+                      refundStatus={o!.refundStatus}
+                    />
                     <AdminDeleteButton resource="orders" id={o!.id} label={`order ${o!.id.slice(0, 8)}`} />
                   </div>
                 </td>
@@ -104,7 +109,7 @@ function StatusPill({ status }: { status: string }) {
       ? "bg-ok-soft text-ok"
       : status === "PENDING"
       ? "bg-warn-soft text-warn"
-      : status === "FAILED" || status === "RETURNING" || status === "RETURNED"
+      : status === "FAILED" || status === "RETURNING" || status === "RETURNED" || status === "CANCELLED"
       ? "bg-danger-soft text-danger"
       : "bg-info-soft text-info";
   return (

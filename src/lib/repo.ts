@@ -694,6 +694,13 @@ function mapOrder(r: any) {
     ageVerifiedAt: r.age_verified_at ?? null,
     ageVerificationMethod: r.age_verification_method ?? null,
     temperatureRequirement: r.temperature_requirement ?? "ambient",
+    cancelledAt: r.cancelled_at ?? null,
+    cancelledBy: r.cancelled_by ?? null,
+    cancelReason: r.cancel_reason ?? null,
+    refundStatus: r.refund_status ?? "none",
+    refundAmountCents: r.refund_amount_cents ?? null,
+    refundNote: r.refund_note ?? null,
+    refundedAt: r.refunded_at ?? null,
     createdAt: r.created_at,
     assignedAt: r.assigned_at,
     pickedUpAt: r.picked_up_at,
@@ -947,6 +954,75 @@ export function markOrderFailed(orderId: string, courierId: string, reason: stri
     logEvent(orderId, "status_change", { status: "FAILED", reason });
     // A failed drop moves the completion rate, which can move the tier too.
     refreshCourierTier(courierId);
+  }
+  return result.changes > 0;
+}
+
+// A delivery already in the courier's hands can't be "un-delivered" by
+// cancelling it — past this point it has to go through fail/return instead.
+const CANCELLABLE_STATUSES = ["PENDING", "ASSIGNED"];
+
+/**
+ * Cancel an order before it's picked up. Merchant cancels their own order,
+ * or admin cancels any order (stuck/duplicate/customer changed their mind).
+ * Any live offer on the order is expired and, if it was sitting in a batch,
+ * it's pulled out so the batch's stop count stays accurate. Billing here is
+ * simple (merchants aren't charged until delivery completes today), so a
+ * cancellation itself doesn't owe money back — refund_status only moves to
+ * 'pending' when the caller says the merchant was actually charged for it.
+ */
+export function cancelOrder(
+  orderId: string,
+  actorUserId: string,
+  reason: string,
+  opts?: { wasCharged?: boolean }
+) {
+  const order = getOrderById(orderId);
+  if (!order || !CANCELLABLE_STATUSES.includes(order.status)) return false;
+
+  const result = db
+    .prepare(
+      `UPDATE orders SET status = 'CANCELLED', cancelled_at = ?, cancelled_by = ?, cancel_reason = ?,
+              refund_status = CASE WHEN ? THEN 'pending' ELSE refund_status END
+       WHERE id = ? AND status IN ('PENDING','ASSIGNED')`
+    )
+    .run(now(), actorUserId, reason, opts?.wasCharged ? 1 : 0, orderId);
+
+  if (result.changes > 0) {
+    logEvent(orderId, "status_change", { status: "CANCELLED", reason });
+    db.prepare(`UPDATE offers SET status = 'expired', responded_at = ? WHERE order_id = ? AND status = 'offered'`).run(
+      now(),
+      orderId
+    );
+    if (order.batchId) {
+      db.prepare(`UPDATE orders SET batch_id = NULL, batch_sequence = NULL WHERE id = ?`).run(orderId);
+      const remaining = (
+        db.prepare(`SELECT COUNT(*) as n FROM orders WHERE batch_id = ?`).get(order.batchId) as any
+      ).n;
+      db.prepare(`UPDATE batches SET stop_count = ? WHERE id = ?`).run(remaining, order.batchId);
+    }
+    writeAudit(actorUserId, "order_cancelled", "order", orderId, reason);
+  }
+  return result.changes > 0;
+}
+
+/** Admin settles a refund owed on a cancelled (or otherwise problem) order. */
+export function setOrderRefund(
+  orderId: string,
+  adminUserId: string,
+  status: "refunded" | "denied",
+  amountCents?: number,
+  note?: string
+) {
+  const result = db
+    .prepare(
+      `UPDATE orders SET refund_status = ?, refund_amount_cents = ?, refund_note = ?,
+              refunded_at = CASE WHEN ? = 'refunded' THEN ? ELSE refunded_at END
+       WHERE id = ?`
+    )
+    .run(status, amountCents ?? null, note ?? null, status, now(), orderId);
+  if (result.changes > 0) {
+    writeAudit(adminUserId, `refund_${status}`, "order", orderId, note ?? (amountCents ? `$${(amountCents / 100).toFixed(2)}` : undefined));
   }
   return result.changes > 0;
 }
