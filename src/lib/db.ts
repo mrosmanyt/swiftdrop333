@@ -183,8 +183,11 @@ CREATE TABLE IF NOT EXISTS disputes (
  */
 function ensureColumn(table: string, column: string, definition: string) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!cols.some((c) => c.name === column)) {
+  if (cols.some((c) => c.name === column)) return;
+  try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (e: any) {
+    if (!/duplicate column name/i.test(String(e?.message ?? e))) throw e;
   }
 }
 
