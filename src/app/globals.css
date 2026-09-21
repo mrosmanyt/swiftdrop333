@@ -98,6 +98,8 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* Every surface in the product — public site and signed-in portals alike —
@@ -106,6 +108,8 @@ body {
   @apply antialiased;
   background-color: rgb(var(--bg));
   color: rgb(var(--fg));
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* Form controls are painted by the OS, not by us; without this the browser
