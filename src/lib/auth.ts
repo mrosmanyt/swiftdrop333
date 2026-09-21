@@ -27,7 +27,8 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = findUserByEmail(credentials.email);
+        const email = credentials.email.trim().toLowerCase();
+        const user = findUserByEmail(email);
         // Compare against a dummy hash even when the email doesn't exist.
         // Skipping bcrypt entirely on a miss makes "no such account" return
         // in ~1ms while a wrong password takes ~100ms — an attacker timing

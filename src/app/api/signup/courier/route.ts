@@ -36,13 +36,14 @@ export async function POST(req: NextRequest) {
   }
   const input = parsed.data;
 
-  if (findUserByEmail(input.email)) {
+  const email = input.email.trim().toLowerCase();
+  if (findUserByEmail(email)) {
     return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 });
   }
 
   const passwordHash = await bcrypt.hash(input.password, 10);
   const userId = createUser({
-    email: input.email,
+    email,
     phone: input.phone,
     fullName: input.fullName,
     passwordHash,
