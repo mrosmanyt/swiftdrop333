@@ -6,7 +6,11 @@
  * comma, quote, or newline, and doubles any internal quotes. */
 function escapeCell(value: unknown): string {
   if (value === null || value === undefined) return "";
-  const s = String(value);
+  let s = String(value);
+  // Formula injection: a cell starting with = + - @ (or tab/CR) is executed
+  // by Excel/Sheets — e.g. a business named =HYPERLINK(...). Prefix with a
+  // quote so it's shown as text.
+  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
   if (/[",\n\r]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }

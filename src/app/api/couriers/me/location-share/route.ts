@@ -7,9 +7,9 @@ export async function POST() {
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
-  const { token, expiresAt } = createLocationShare(courier.id, 60);
+  const { token, expiresAt } = await createLocationShare(courier.id, 60);
   return NextResponse.json({ token, expiresAt }, { status: 201 });
 }

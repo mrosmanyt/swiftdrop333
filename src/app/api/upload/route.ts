@@ -1,39 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { requireRole } from "@/lib/session";
+import { savePodPhoto, sniffType } from "@/lib/storage";
+import { hit } from "@/lib/rateLimit";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
 /**
  * POST /api/upload — courier-only proof-of-delivery photo upload.
- * Stores to /public/uploads for local dev; swap for S3/Cloudflare R2 before
- * production (this is the one place that would need to change).
+ *
+ * The file type is decided from the file's own bytes (not the browser's
+ * claim), EXIF/GPS metadata is stripped, and the photo is stored on the
+ * persistent volume — see src/lib/storage.ts. The returned URL is served by
+ * GET /api/pod/:name.
  */
 export async function POST(req: NextRequest) {
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
+
+  if (!hit(`upload:pod:${auth.id}`, 60, 60 * 60 * 1000).ok) {
+    return NextResponse.json({ error: "Too many uploads — try again later." }, { status: 429 });
+  }
 
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });
-  }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ error: "File too large (max 8MB)" }, { status: 400 });
   }
 
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const ext = file.type.split("/")[1] ?? "jpg";
-  const filename = `${randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), bytes);
+  const type = sniffType(bytes);
+  if (type !== "jpeg" && type !== "png" && type !== "webp") {
+    return NextResponse.json({ error: "Upload a JPG, PNG or WEBP photo" }, { status: 400 });
+  }
 
-  return NextResponse.json({ url: `/uploads/${filename}` }, { status: 201 });
+  const url = await savePodPhoto(bytes, type);
+  return NextResponse.json({ url }, { status: 201 });
 }

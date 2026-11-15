@@ -7,5 +7,5 @@ import { listNotifications } from "@/lib/repo";
 export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
-  return NextResponse.json({ notifications: listNotifications(200) });
+  return NextResponse.json({ notifications: await listNotifications(200) });
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/session";
-import { createTicket, listTicketsForUser } from "@/lib/repo";
+import { createTicket, getOrderById, listTicketsForUser } from "@/lib/repo";
+import { clientIp, hit } from "@/lib/rateLimit";
 import { send } from "@/lib/notify";
 
 /**
@@ -13,7 +14,7 @@ import { send } from "@/lib/notify";
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ tickets: [] });
-  return NextResponse.json({ tickets: listTicketsForUser(user.id) });
+  return NextResponse.json({ tickets: await listTicketsForUser(user.id) });
 }
 
 const schema = z.object({
@@ -25,6 +26,10 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Open to signed-out customers, so it must not become a spam cannon.
+  if (!hit(`ticket:ip:${clientIp(req.headers)}`, 5, 60 * 60 * 1000).ok) {
+    return NextResponse.json({ error: "Too many messages — please try again later." }, { status: 429 });
+  }
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
@@ -39,7 +44,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Please include an email so we can reply." }, { status: 400 });
   }
 
-  const { ticketId, reference } = createTicket({
+  if (parsed.data.orderId && !await getOrderById(parsed.data.orderId)) {
+    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  }
+
+  const { ticketId, reference } = await createTicket({
     openedByRole: role,
     openedByUserId: user?.id ?? null,
     contactEmail: parsed.data.contactEmail ?? user?.email ?? null,
@@ -54,7 +63,10 @@ export async function POST(req: NextRequest) {
     to: parsed.data.contactEmail ?? user?.email ?? "",
     template: "ticket_opened",
     subject: `We got your message (${reference})`,
-    body: `Thanks for getting in touch. Your reference is ${reference} — our team will reply shortly.\n\nWhat you told us:\n${parsed.data.body}`,
+    // The sender's own text is deliberately NOT echoed back: this endpoint
+    // accepts any email address from signed-out visitors, so echoing would
+    // let anyone send arbitrary content from our domain to any inbox.
+    body: `Thanks for getting in touch. Your reference is ${reference} — our team will reply shortly.`,
     orderId: parsed.data.orderId,
   });
 

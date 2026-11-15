@@ -7,7 +7,7 @@ export default async function AdminZonesPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const zones = listAllZones();
+  const zones = await listAllZones();
 
   return (
     <div className="space-y-4">

@@ -6,7 +6,7 @@ import { createChallenge, listAllChallenges } from "@/lib/repo";
 export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
-  return NextResponse.json({ challenges: listAllChallenges() });
+  return NextResponse.json({ challenges: await listAllChallenges() });
 }
 
 const schema = z.object({
@@ -28,6 +28,6 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const challengeId = createChallenge(parsed.data);
+  const challengeId = await createChallenge(parsed.data);
   return NextResponse.json({ challengeId }, { status: 201 });
 }

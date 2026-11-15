@@ -15,12 +15,12 @@ export async function GET() {
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
   return NextResponse.json({
-    period14: courierPayTransparency(courier.id, 14),
-    period90: courierPayTransparency(courier.id, 90),
+    period14: await courierPayTransparency(courier.id, 14),
+    period90: await courierPayTransparency(courier.id, 90),
     payModel: {
       description:
         "You earn a per-delivery fee (base + distance, times the service-type and surge multipliers), plus your tier bonus per delivery, plus any challenge bonuses you complete.",

@@ -7,7 +7,7 @@ export default async function MerchantSupportPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "MERCHANT") redirect("/login");
 
-  const tickets = listTicketsForUser(user.id);
+  const tickets = await listTicketsForUser(user.id);
 
   return (
     <div className="max-w-2xl space-y-6">

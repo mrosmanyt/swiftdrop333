@@ -23,19 +23,19 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
   const lat = parsed.data.lat ?? courier.lastLat ?? null;
   const lng = parsed.data.lng ?? courier.lastLng ?? null;
-  const active = listActiveOrdersForCourier(courier.id);
+  const active = await listActiveOrdersForCourier(courier.id);
   const orderId = active[0]?.id ?? null;
 
-  const incidentId = createSafetyIncident({ courierId: courier.id, orderId, lat, lng, note: parsed.data.note ?? null });
+  const incidentId = await createSafetyIncident({ courierId: courier.id, orderId, lat, lng, note: parsed.data.note ?? null });
 
   const name = courier.fullName ?? "A courier";
   const locationNote = lat != null && lng != null ? " — location attached" : " — no location available";
-  for (const adminUserId of adminUserIds()) {
+  for (const adminUserId of await adminUserIds()) {
     void pushToUser(adminUserId, {
       title: "🆘 SOS — courier needs help",
       body: `${name} pressed SOS${locationNote}.`,

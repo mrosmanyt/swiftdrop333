@@ -16,8 +16,8 @@ export default async function DriverOffersPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
-  const blockReason = courierBlockReason(courier);
+  const courier = await getCourierProfileByUserId(user.id);
+  const blockReason = await courierBlockReason(courier);
 
   if (blockReason) {
     return (
@@ -34,10 +34,10 @@ export default async function DriverOffersPage() {
     );
   }
 
-  const activeOrders = listActiveOrdersForCourier(courier!.id);
-  const myOffers = listActiveOffersForCourier(courier!.id);
+  const activeOrders = await listActiveOrdersForCourier(courier!.id);
+  const myOffers = await listActiveOffersForCourier(courier!.id);
   // Orders nobody nearby accepted — open to any online courier.
-  const broadcastOrders = listPendingOrders(20).filter((o) => o!.dispatchMode === "broadcast");
+  const broadcastOrders = (await listPendingOrders(20)).filter((o) => o!.dispatchMode === "broadcast");
 
   return (
     <div className="space-y-8">

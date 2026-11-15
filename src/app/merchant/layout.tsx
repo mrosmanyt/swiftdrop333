@@ -15,6 +15,7 @@ const LINKS: SidebarLink[] = [
   { href: "/merchant/analytics", label: "Analytics", icon: <Icon d="M3 3v18h18M7 16l4-6 3 4 5-8" /> },
   { href: "/merchant/tools", label: "Tools & API", icon: <Icon d="M14.7 6.3a4 4 0 1 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4z" /> },
   { href: "/merchant/support", label: "Support", icon: <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /> },
+  { href: "/merchant/account", label: "Account & privacy", icon: <Icon d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" /> },
 ];
 
 export default function MerchantLayout({ children }: { children: React.ReactNode }) {

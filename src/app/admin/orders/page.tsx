@@ -15,8 +15,8 @@ export default async function AdminOrdersPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const orders = listAllOrders(100);
-  const couriers = listCouriers()
+  const orders = await listAllOrders(100);
+  const couriers = (await listCouriers())
     .filter((c) => c!.approvalStatus === "approved")
     .map((c) => ({ id: c!.id, email: c!.email, tier: c!.tier, isOnline: c!.isOnline }));
 

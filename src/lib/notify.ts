@@ -30,21 +30,39 @@ interface SendInput {
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "SwiftDrop";
 const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
-function record(input: SendInput & { status: string; provider: string; error?: string }) {
-  db.prepare(
+/** "sara@shop.ca" -> "s***@shop.ca", "+14165551234" -> "***234". */
+export function maskRecipient(to: string): string {
+  if (!to) return "";
+  const at = to.indexOf("@");
+  if (at > 0) return `${to[0]}***${to.slice(at)}`;
+  return `***${to.slice(-3)}`;
+}
+
+/**
+ * Delivery log. Deliberately does NOT keep the message body or the full
+ * phone number / email address: bodies contain customer names, home
+ * addresses and chat text, and a log table is exactly the kind of place
+ * personal data piles up and gets copied into backups. What's kept is
+ * enough to answer "did the customer's tracking SMS go out?" — which
+ * template, to whom (masked), for which order, and whether it succeeded.
+ */
+async function record(input: SendInput & { status: string; provider: string; error?: string }) {
+  await db.prepare(
     `INSERT INTO notifications (id, order_id, channel, recipient, template, subject, body, status, provider, error, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     randomUUID(),
     input.orderId ?? null,
     input.channel,
-    input.to,
+    maskRecipient(input.to),
     input.template,
     input.subject ?? null,
-    input.body,
+    "",
     input.status,
     input.provider,
-    input.error ?? null,
+    // Provider error payloads can echo the recipient back; keep only the
+    // status/code part.
+    input.error ? String(input.error).slice(0, 120).replace(/[^\s@]+@[^\s@]+/g, "[email]").replace(/\+?\d[\d\s()-]{7,}\d/g, "[phone]") : null,
     new Date().toISOString()
   );
 }
@@ -55,7 +73,7 @@ async function sendSms(input: SendInput) {
   const from = process.env.TWILIO_FROM_NUMBER;
 
   if (!sid || !token || !from) {
-    record({ ...input, status: "logged", provider: "console" });
+    await record({ ...input, status: "logged", provider: "console" });
     return { sent: false, logged: true };
   }
 
@@ -69,10 +87,10 @@ async function sendSms(input: SendInput) {
       body: new URLSearchParams({ To: input.to, From: from, Body: input.body }),
     });
     if (!res.ok) throw new Error(`twilio ${res.status}: ${await res.text()}`);
-    record({ ...input, status: "sent", provider: "twilio" });
+    await record({ ...input, status: "sent", provider: "twilio" });
     return { sent: true, logged: true };
   } catch (e: any) {
-    record({ ...input, status: "failed", provider: "twilio", error: String(e?.message ?? e) });
+    await record({ ...input, status: "failed", provider: "twilio", error: String(e?.message ?? e) });
     return { sent: false, logged: true };
   }
 }
@@ -82,7 +100,7 @@ async function sendEmail(input: SendInput) {
   const from = process.env.EMAIL_FROM;
 
   if (!key || !from) {
-    record({ ...input, status: "logged", provider: "console" });
+    await record({ ...input, status: "logged", provider: "console" });
     return { sent: false, logged: true };
   }
 
@@ -98,10 +116,10 @@ async function sendEmail(input: SendInput) {
       }),
     });
     if (!res.ok) throw new Error(`resend ${res.status}: ${await res.text()}`);
-    record({ ...input, status: "sent", provider: "resend" });
+    await record({ ...input, status: "sent", provider: "resend" });
     return { sent: true, logged: true };
   } catch (e: any) {
-    record({ ...input, status: "failed", provider: "resend", error: String(e?.message ?? e) });
+    await record({ ...input, status: "failed", provider: "resend", error: String(e?.message ?? e) });
     return { sent: false, logged: true };
   }
 }

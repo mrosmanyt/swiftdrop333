@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
-import { findUserById, listOrdersForCustomer } from "@/lib/repo";
+import { listOrdersForCustomer } from "@/lib/repo";
 import { Card, EmptyState, PageHeader, StatusBadge, TableWrap, orderRef } from "@/components/portal/ui";
 
 const ACTIVE = ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"];
@@ -10,12 +10,11 @@ export default async function CustomerOrdersPage() {
   const session = await getSessionUser();
   if (!session || session.role !== "CUSTOMER") redirect("/login");
 
-  const user = findUserById(session.id);
-  const orders = listOrdersForCustomer({ email: user?.email ?? session.email, phone: user?.phone }, 300);
+  const orders = await listOrdersForCustomer(session.id, 300);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Order History" subtitle="Every delivery sent to your email or phone number." />
+      <PageHeader title="Order History" subtitle="Deliveries you have opened from a tracking link while signed in." />
 
       <Card bodyClassName="">
         {orders.length ? (
@@ -59,7 +58,7 @@ export default async function CustomerOrdersPage() {
         ) : (
           <EmptyState
             title="No deliveries yet"
-            hint="Once a business sends you a delivery using this email or phone number, it'll show up here automatically."
+            hint="Open the tracking link from your delivery text or email while signed in, and that delivery is saved here."
           />
         )}
       </Card>

@@ -7,7 +7,7 @@ export default async function AdminNotificationsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const notifications = listNotifications(200);
+  const notifications = await listNotifications(200);
   const logged = notifications.filter((n) => n.status === "logged").length;
   const failed = notifications.filter((n) => n.status === "failed").length;
 
@@ -46,7 +46,7 @@ export default async function AdminNotificationsPage() {
               <th className="p-3">Channel</th>
               <th className="p-3">To</th>
               <th className="p-3">Template</th>
-              <th className="p-3">Body</th>
+              <th className="p-3">Subject</th>
               <th className="p-3">Status</th>
             </tr>
           </thead>
@@ -64,7 +64,7 @@ export default async function AdminNotificationsPage() {
                 <td className="p-3 text-xs uppercase">{n.channel}</td>
                 <td className="p-3 text-xs">{n.recipient}</td>
                 <td className="p-3 text-xs text-fg-muted">{n.template}</td>
-                <td className="p-3 max-w-md text-xs text-fg-muted">{n.body}</td>
+                <td className="p-3 max-w-md text-xs text-fg-muted">{n.subject ?? "—"}</td>
                 <td className="p-3">
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs ${

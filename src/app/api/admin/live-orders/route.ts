@@ -8,5 +8,5 @@ export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  return NextResponse.json({ orders: listActiveOrdersWithCourierLocation() });
+  return NextResponse.json({ orders: await listActiveOrdersWithCourierLocation() });
 }

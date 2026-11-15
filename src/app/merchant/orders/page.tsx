@@ -26,8 +26,8 @@ export default async function MerchantOrdersPage({
   const user = await getSessionUser();
   if (!user || user.role !== "MERCHANT") redirect("/login");
 
-  const merchant = getMerchantProfileByUserId(user.id);
-  const all = merchant ? listOrdersForMerchant(merchant.id, 200) : [];
+  const merchant = await getMerchantProfileByUserId(user.id);
+  const all = merchant ? await listOrdersForMerchant(merchant.id, 200) : [];
 
   const active = FILTERS.find((f) => f.key === searchParams.status) ?? FILTERS[0];
   const orders = all.filter((o) => active.match(o!.status));

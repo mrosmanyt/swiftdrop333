@@ -13,6 +13,7 @@ const LINKS: SidebarLink[] = [
   { href: "/customer/orders", label: "Order History", icon: <Icon d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3zM9 7v13M15 4v13" /> },
   { href: "/customer/addresses", label: "Saved Addresses", icon: <Icon d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z M12 13a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" /> },
   { href: "/customer/loyalty", label: "Loyalty & Referrals", icon: <Icon d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8-5.1-4.7 6.9-.8z" /> },
+  { href: "/customer/account", label: "Account & privacy", icon: <Icon d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" /> },
 ];
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {

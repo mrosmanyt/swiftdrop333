@@ -19,11 +19,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const ticket = getTicket(params.id);
+  const ticket = await getTicket(params.id);
   if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
 
   if (parsed.data.reply) {
-    addTicketMessage({
+    await addTicketMessage({
       ticketId: params.id,
       senderRole: "admin",
       senderUserId: auth.id,
@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (parsed.data.status) {
-    setTicketStatus(params.id, parsed.data.status, auth.id);
+    await setTicketStatus(params.id, parsed.data.status, auth.id);
   }
 
   return NextResponse.json({ ok: true });

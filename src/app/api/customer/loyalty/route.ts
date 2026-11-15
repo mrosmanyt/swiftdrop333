@@ -7,7 +7,7 @@ export async function GET() {
   const auth = await requireRole("CUSTOMER");
   if (auth instanceof NextResponse) return auth;
 
-  const account = getLoyaltyAccount(auth.id);
-  const transactions = listLoyaltyTransactions(auth.id, 50);
+  const account = await getLoyaltyAccount(auth.id);
+  const transactions = await listLoyaltyTransactions(auth.id, 50);
   return NextResponse.json({ account, transactions });
 }

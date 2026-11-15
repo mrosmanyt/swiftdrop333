@@ -10,9 +10,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
-  softDeleteOrder(order.id, auth.id);
+  await softDeleteOrder(order.id, auth.id);
   return NextResponse.json({ ok: true });
 }

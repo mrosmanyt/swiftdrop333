@@ -1,11 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { computeCourierTier } from "@/lib/pricing";
 
 /**
  * Data-access layer — every API route and page in the app goes through
- * these functions instead of writing raw SQL inline. This is the single
- * place to swap SQLite for Postgres later without touching route/page code.
+ * these functions instead of writing raw SQL inline. The database is
+ * PostgreSQL (see src/lib/db.ts), so every function here is async.
  */
 
 export type Role = "MERCHANT" | "COURIER" | "ADMIN" | "CUSTOMER";
@@ -27,8 +27,8 @@ const id = () => randomUUID();
 const now = () => new Date().toISOString();
 
 /**
- * node:sqlite returns rows with a null prototype. React refuses to pass
- * those from a Server Component to a Client Component, so every row that
+ * React refuses to pass anything but plain objects from a Server Component
+ * to a Client Component, so every row that
  * leaves this module unmapped goes through here first to become a plain
  * object. (The map* functions below already build plain objects.)
  */
@@ -36,8 +36,19 @@ function toPlain<T = any>(row: any): T {
   return { ...(row as object) } as T;
 }
 
-function logEvent(orderId: string, type: string, payload?: unknown) {
-  db.prepare(
+/**
+ * Government / policy ID numbers are never stored in full — only the last
+ * four characters, enough to match the record against the uploaded
+ * document. "A1234-56789-01234" -> "****1234".
+ */
+export function maskIdNumber(value?: string | null): string | null {
+  const v = (value ?? "").replace(/[\s-]/g, "");
+  if (!v) return null;
+  return `****${v.slice(-4)}`;
+}
+
+async function logEvent(orderId: string, type: string, payload?: unknown) {
+  await db.prepare(
     `INSERT INTO order_events (id, order_id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`
   ).run(id(), orderId, type, payload ? JSON.stringify(payload) : null, now());
 }
@@ -46,27 +57,27 @@ function logEvent(orderId: string, type: string, payload?: unknown) {
 // Audit log — every admin decision is recorded, for compliance and support
 // ---------------------------------------------------------------------------
 
-export function writeAudit(
+export async function writeAudit(
   actorUserId: string | null,
   action: string,
   targetType?: string,
   targetId?: string,
   notes?: string
 ) {
-  db.prepare(
+  await db.prepare(
     `INSERT INTO audit_log (id, actor_user_id, action, target_type, target_id, notes, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(id(), actorUserId, action, targetType ?? null, targetId ?? null, notes ?? null, now());
 }
 
-export function listAuditForTarget(targetType: string, targetId: string) {
-  return db
+export async function listAuditForTarget(targetType: string, targetId: string) {
+  return (await db
     .prepare(
       `SELECT a.*, u.email as actor_email FROM audit_log a
        LEFT JOIN users u ON u.id = a.actor_user_id
        WHERE a.target_type = ? AND a.target_id = ? ORDER BY a.created_at DESC`
     )
-    .all(targetType, targetId)
+    .all(targetType, targetId))
     .map(toPlain) as any[];
 }
 
@@ -74,7 +85,7 @@ export function listAuditForTarget(targetType: string, targetId: string) {
 // Documents (courier licence/insurance, merchant business docs)
 // ---------------------------------------------------------------------------
 
-export function addDocument(input: {
+export async function addDocument(input: {
   ownerType: "courier" | "merchant";
   ownerId: string;
   docType: string;
@@ -82,30 +93,43 @@ export function addDocument(input: {
   originalName?: string;
 }) {
   const docId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO documents (id, owner_type, owner_id, doc_type, url, original_name, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`
   ).run(docId, input.ownerType, input.ownerId, input.docType, input.url, input.originalName ?? null, now());
   return docId;
 }
 
-export function listDocuments(ownerType: "courier" | "merchant", ownerId: string) {
-  return db
+export async function listDocuments(ownerType: "courier" | "merchant", ownerId: string) {
+  return (await db
     .prepare(
-      `SELECT id, owner_type as ownerType, owner_id as ownerId, doc_type as docType,
-              url, original_name as originalName, status, created_at as createdAt
+      `SELECT id, owner_type as "ownerType", owner_id as "ownerId", doc_type as "docType",
+              url, original_name as "originalName", status, created_at as "createdAt",
+              file_purged_at as "filePurgedAt"
        FROM documents WHERE owner_type = ? AND owner_id = ? ORDER BY created_at DESC`
     )
-    .all(ownerType, ownerId)
+    .all(ownerType, ownerId))
     .map(toPlain) as any[];
 }
 
-export function setDocumentStatus(docId: string, status: "pending" | "accepted" | "rejected") {
-  db.prepare(`UPDATE documents SET status = ? WHERE id = ?`).run(status, docId);
+export async function setDocumentStatus(docId: string, status: "pending" | "accepted" | "rejected") {
+  await db.prepare(`UPDATE documents SET status = ? WHERE id = ?`).run(status, docId);
 }
 
-export function getDocumentById(docId: string) {
-  const r = db.prepare(`SELECT * FROM documents WHERE id = ?`).get(docId) as any;
+/**
+ * Once an application is decided, its pending documents are stamped as
+ * reviewed. The retention job (lib/retention.ts) deletes the actual files
+ * DOC_FILE_RETENTION_DAYS after that — the decision is what the platform
+ * needs to keep, not a copy of someone's licence.
+ */
+export async function markDocumentsReviewed(ownerType: "courier" | "merchant", ownerId: string, accepted: boolean) {
+  await db.prepare(
+    `UPDATE documents SET status = ?, reviewed_at = ? WHERE owner_type = ? AND owner_id = ? AND status = 'pending'`
+  ).run(accepted ? "accepted" : "rejected", now(), ownerType, ownerId);
+}
+
+export async function getDocumentById(docId: string) {
+  const r = await db.prepare(`SELECT * FROM documents WHERE id = ?`).get(docId) as any;
   if (!r) return null;
   return {
     id: r.id,
@@ -132,6 +156,7 @@ export interface UserRow {
   role: Role;
   status: string;
   locale: string;
+  passwordChangedAt: string | null;
   createdAt: string;
 }
 
@@ -146,19 +171,20 @@ function mapUser(r: any): UserRow | null {
     role: r.role,
     status: r.status ?? "active",
     locale: r.locale ?? "en",
+    passwordChangedAt: r.password_changed_at ?? null,
     createdAt: r.created_at,
   };
 }
 
-export function findUserByEmail(email: string) {
-  return mapUser(db.prepare(`SELECT * FROM users WHERE email = ?`).get(email));
+export async function findUserByEmail(email: string) {
+  return mapUser(await db.prepare(`SELECT * FROM users WHERE email = ?`).get(email));
 }
 
-export function findUserById(userId: string) {
-  return mapUser(db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId));
+export async function findUserById(userId: string) {
+  return mapUser(await db.prepare(`SELECT * FROM users WHERE id = ?`).get(userId));
 }
 
-export function createUser(input: {
+export async function createUser(input: {
   email: string;
   phone?: string;
   fullName?: string;
@@ -166,7 +192,7 @@ export function createUser(input: {
   role: Role;
 }) {
   const userId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO users (id, email, phone, full_name, password_hash, role, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
@@ -182,8 +208,8 @@ export function createUser(input: {
   return userId;
 }
 
-export function setUserStatus(userId: string, status: "active" | "suspended") {
-  db.prepare(`UPDATE users SET status = ?, updated_at = ? WHERE id = ?`).run(status, now(), userId);
+export async function setUserStatus(userId: string, status: "active" | "suspended") {
+  await db.prepare(`UPDATE users SET status = ?, updated_at = ? WHERE id = ?`).run(status, now(), userId);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +225,9 @@ function mapMerchant(r: any) {
     contactName: r.contact_name ?? null,
     businessPhone: r.business_phone ?? null,
     businessAddress: r.business_address ?? null,
+    businessCity: r.business_city ?? null,
     businessNumber: r.business_number ?? null,
+    dailyVolume: r.daily_volume ?? null,
     website: r.website ?? null,
     kybStatus: r.kyb_status,
     kybNotes: r.kyb_notes ?? null,
@@ -215,22 +243,24 @@ function mapMerchant(r: any) {
   };
 }
 
-export function createMerchantProfile(input: {
+export async function createMerchantProfile(input: {
   userId: string;
   businessName: string;
   contactName?: string;
   businessPhone?: string;
   businessAddress?: string;
+  businessCity?: string;
   businessNumber?: string;
+  dailyVolume?: string;
   website?: string;
   kybStatus?: string;
 }) {
   const profileId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO merchant_profiles
        (id, user_id, business_name, contact_name, business_phone, business_address,
-        business_number, website, kyb_status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        business_city, business_number, daily_volume, website, kyb_status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     profileId,
     input.userId,
@@ -238,7 +268,9 @@ export function createMerchantProfile(input: {
     input.contactName ?? null,
     input.businessPhone ?? null,
     input.businessAddress ?? null,
+    input.businessCity ?? null,
     input.businessNumber ?? null,
+    input.dailyVolume ?? null,
     input.website ?? null,
     input.kybStatus ?? "pending",
     now()
@@ -247,43 +279,44 @@ export function createMerchantProfile(input: {
 }
 
 /** Admin decision on a merchant's KYB application. */
-export function setMerchantKybStatus(
+export async function setMerchantKybStatus(
   merchantId: string,
   status: "pending" | "verified" | "rejected",
   reviewerUserId: string,
   notes?: string
 ) {
-  db.prepare(
+  await db.prepare(
     `UPDATE merchant_profiles SET kyb_status = ?, kyb_notes = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?`
   ).run(status, notes ?? null, now(), reviewerUserId, merchantId);
-  writeAudit(reviewerUserId, `merchant_${status}`, "merchant", merchantId, notes);
+  if (status !== "pending") await markDocumentsReviewed("merchant", merchantId, status === "verified");
+  await writeAudit(reviewerUserId, `merchant_${status}`, "merchant", merchantId, notes);
 }
 
-export function listMerchantsByKyb(status: string) {
-  return db
+export async function listMerchantsByKyb(status: string) {
+  return (await db
     .prepare(
       `SELECT m.*, u.email as email, u.status as user_status
        FROM merchant_profiles m JOIN users u ON u.id = m.user_id
        WHERE m.kyb_status = ? ORDER BY m.created_at ASC`
     )
-    .all(status)
+    .all(status))
     .map(mapMerchant);
 }
 
-export function getMerchantProfileByUserId(userId: string) {
+export async function getMerchantProfileByUserId(userId: string) {
   return mapMerchant(
-    db.prepare(`SELECT * FROM merchant_profiles WHERE user_id = ?`).get(userId)
+    await db.prepare(`SELECT * FROM merchant_profiles WHERE user_id = ?`).get(userId)
   );
 }
 
-export function getMerchantProfileById(profileId: string) {
+export async function getMerchantProfileById(profileId: string) {
   return mapMerchant(
-    db.prepare(`SELECT * FROM merchant_profiles WHERE id = ?`).get(profileId)
+    await db.prepare(`SELECT * FROM merchant_profiles WHERE id = ?`).get(profileId)
   );
 }
 
-export function listMerchants() {
-  const rows = db
+export async function listMerchants() {
+  const rows = await db
     .prepare(
       `SELECT m.*, u.email as email, u.status as user_status,
               (SELECT COUNT(*) FROM orders o WHERE o.merchant_id = m.id) as order_count
@@ -298,30 +331,33 @@ export function listMerchants() {
 
 /** Soft delete — moves the merchant to /admin/deleted-records instead of
  *  erasing it, so a wrong click doesn't destroy real order history. */
-export function softDeleteMerchant(merchantId: string, adminUserId: string) {
-  db.prepare(`UPDATE merchant_profiles SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
+export async function softDeleteMerchant(merchantId: string, adminUserId: string) {
+  await db.prepare(`UPDATE merchant_profiles SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
     now(),
     adminUserId,
     merchantId
   );
-  writeAudit(adminUserId, "merchant_deleted", "merchant", merchantId);
+  await scheduleErasure(`SELECT user_id FROM merchant_profiles WHERE id = ?`, merchantId);
+  await writeAudit(adminUserId, "merchant_deleted", "merchant", merchantId);
 }
 
-export function restoreMerchant(merchantId: string, adminUserId: string) {
-  db.prepare(`UPDATE merchant_profiles SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(
+export async function restoreMerchant(merchantId: string, adminUserId: string) {
+  if (!await cancelErasure(`SELECT user_id FROM merchant_profiles WHERE id = ?`, merchantId)) return false;
+  await db.prepare(`UPDATE merchant_profiles SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(
     merchantId
   );
-  writeAudit(adminUserId, "merchant_restored", "merchant", merchantId);
+  await writeAudit(adminUserId, "merchant_restored", "merchant", merchantId);
+  return true;
 }
 
-export function listDeletedMerchants() {
-  return db
+export async function listDeletedMerchants() {
+  return (await db
     .prepare(
       `SELECT m.*, u.email as email, u.status as user_status
        FROM merchant_profiles m JOIN users u ON u.id = m.user_id
        WHERE m.deleted_at IS NOT NULL ORDER BY m.deleted_at DESC`
     )
-    .all()
+    .all())
     .map(mapMerchant);
 }
 
@@ -368,7 +404,7 @@ function mapCourier(r: any) {
   };
 }
 
-export function createCourierProfile(input: {
+export async function createCourierProfile(input: {
   userId: string;
   vehicleType: VehicleType;
   fullName?: string;
@@ -384,7 +420,7 @@ export function createCourierProfile(input: {
   approvalStatus?: string;
 }) {
   const profileId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO courier_profiles
        (id, user_id, vehicle_type, full_name, phone, license_number, license_expiry,
         insurance_provider, insurance_policy_number, insurance_expiry,
@@ -396,10 +432,10 @@ export function createCourierProfile(input: {
     input.vehicleType,
     input.fullName ?? null,
     input.phone ?? null,
-    input.licenseNumber ?? null,
+    maskIdNumber(input.licenseNumber),
     input.licenseExpiry ?? null,
     input.insuranceProvider ?? null,
-    input.insurancePolicyNumber ?? null,
+    maskIdNumber(input.insurancePolicyNumber),
     input.insuranceExpiry ?? null,
     input.vehicleMakeModel ?? null,
     input.vehiclePlate ?? null,
@@ -411,58 +447,59 @@ export function createCourierProfile(input: {
 }
 
 /** Admin decision on a courier application. */
-export function setCourierApprovalStatus(
+export async function setCourierApprovalStatus(
   courierId: string,
   status: "pending" | "approved" | "rejected" | "suspended",
   reviewerUserId: string,
   notes?: string
 ) {
-  db.prepare(
+  await db.prepare(
     `UPDATE courier_profiles SET approval_status = ?, approval_notes = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?`
   ).run(status, notes ?? null, now(), reviewerUserId, courierId);
   // A rejected or suspended courier must not stay online taking offers.
   if (status !== "approved") {
-    db.prepare(`UPDATE courier_profiles SET is_online = 0 WHERE id = ?`).run(courierId);
+    await db.prepare(`UPDATE courier_profiles SET is_online = 0 WHERE id = ?`).run(courierId);
   }
-  writeAudit(reviewerUserId, `courier_${status}`, "courier", courierId, notes);
+  if (status === "approved" || status === "rejected") await markDocumentsReviewed("courier", courierId, status === "approved");
+  await writeAudit(reviewerUserId, `courier_${status}`, "courier", courierId, notes);
 }
 
-export function setCourierBackgroundCheck(courierId: string, status: string) {
-  db.prepare(`UPDATE courier_profiles SET background_check_status = ? WHERE id = ?`).run(
+export async function setCourierBackgroundCheck(courierId: string, status: string) {
+  await db.prepare(`UPDATE courier_profiles SET background_check_status = ? WHERE id = ?`).run(
     status,
     courierId
   );
 }
 
-export function listCouriersByApproval(status: string) {
-  return db
+export async function listCouriersByApproval(status: string) {
+  return (await db
     .prepare(
       `SELECT c.*, u.email as email, u.status as user_status
        FROM courier_profiles c JOIN users u ON u.id = c.user_id
        WHERE c.approval_status = ? ORDER BY c.created_at ASC`
     )
-    .all(status)
+    .all(status))
     .map(mapCourier);
 }
 
-export function updateCourierDocUrl(courierId: string, field: "license_doc_url" | "insurance_doc_url", url: string) {
-  db.prepare(`UPDATE courier_profiles SET ${field} = ? WHERE id = ?`).run(url, courierId);
+export async function updateCourierDocUrl(courierId: string, field: "license_doc_url" | "insurance_doc_url", url: string) {
+  await db.prepare(`UPDATE courier_profiles SET ${field} = ? WHERE id = ?`).run(url, courierId);
 }
 
-export function getCourierProfileByUserId(userId: string) {
+export async function getCourierProfileByUserId(userId: string) {
   return mapCourier(
-    db.prepare(`SELECT * FROM courier_profiles WHERE user_id = ?`).get(userId)
+    await db.prepare(`SELECT * FROM courier_profiles WHERE user_id = ?`).get(userId)
   );
 }
 
-export function getCourierProfileById(profileId: string) {
+export async function getCourierProfileById(profileId: string) {
   return mapCourier(
-    db.prepare(`SELECT * FROM courier_profiles WHERE id = ?`).get(profileId)
+    await db.prepare(`SELECT * FROM courier_profiles WHERE id = ?`).get(profileId)
   );
 }
 
-export function listCouriers(opts: { onlineOnly?: boolean } = {}) {
-  const rows = db
+export async function listCouriers(opts: { onlineOnly?: boolean } = {}) {
+  const rows = await db
     .prepare(
       `SELECT c.*, u.email as email, u.status as user_status,
               (SELECT COUNT(*) FROM orders o WHERE o.courier_id = c.id AND o.status = 'DELIVERED') as order_count
@@ -477,42 +514,45 @@ export function listCouriers(opts: { onlineOnly?: boolean } = {}) {
 
 /** Soft delete — moves the courier to /admin/deleted-records instead of
  *  erasing it, so a wrong click doesn't destroy real delivery history. */
-export function softDeleteCourier(courierId: string, adminUserId: string) {
-  db.prepare(`UPDATE courier_profiles SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
+export async function softDeleteCourier(courierId: string, adminUserId: string) {
+  await db.prepare(`UPDATE courier_profiles SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
     now(),
     adminUserId,
     courierId
   );
-  writeAudit(adminUserId, "courier_deleted", "courier", courierId);
+  await scheduleErasure(`SELECT user_id FROM courier_profiles WHERE id = ?`, courierId);
+  await writeAudit(adminUserId, "courier_deleted", "courier", courierId);
 }
 
-export function restoreCourier(courierId: string, adminUserId: string) {
-  db.prepare(`UPDATE courier_profiles SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(
+export async function restoreCourier(courierId: string, adminUserId: string) {
+  if (!await cancelErasure(`SELECT user_id FROM courier_profiles WHERE id = ?`, courierId)) return false;
+  await db.prepare(`UPDATE courier_profiles SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(
     courierId
   );
-  writeAudit(adminUserId, "courier_restored", "courier", courierId);
+  await writeAudit(adminUserId, "courier_restored", "courier", courierId);
+  return true;
 }
 
-export function listDeletedCouriers() {
-  return db
+export async function listDeletedCouriers() {
+  return (await db
     .prepare(
       `SELECT c.*, u.email as email, u.status as user_status
        FROM courier_profiles c JOIN users u ON u.id = c.user_id
        WHERE c.deleted_at IS NOT NULL ORDER BY c.deleted_at DESC`
     )
-    .all()
+    .all())
     .map(mapCourier);
 }
 
-export function setCourierOnline(courierId: string, isOnline: boolean) {
-  db.prepare(`UPDATE courier_profiles SET is_online = ? WHERE id = ?`).run(
+export async function setCourierOnline(courierId: string, isOnline: boolean) {
+  await db.prepare(`UPDATE courier_profiles SET is_online = ? WHERE id = ?`).run(
     isOnline ? 1 : 0,
     courierId
   );
 }
 
-export function setCourierTier(courierId: string, tier: CourierTier) {
-  db.prepare(`UPDATE courier_profiles SET tier = ? WHERE id = ?`).run(tier, courierId);
+export async function setCourierTier(courierId: string, tier: CourierTier) {
+  await db.prepare(`UPDATE courier_profiles SET tier = ? WHERE id = ?`).run(tier, courierId);
 }
 
 /**
@@ -525,9 +565,9 @@ export function setCourierTier(courierId: string, tier: CourierTier) {
  * STARTER row, loses the per-delivery bonus, and gets ranked below couriers
  * they should be ahead of.
  */
-export function refreshCourierTier(courierId: string): CourierTier {
-  const tier = computeCourierTier(computeCourierStats14d(courierId));
-  setCourierTier(courierId, tier);
+export async function refreshCourierTier(courierId: string): Promise<CourierTier> {
+  const tier = computeCourierTier(await computeCourierStats14d(courierId));
+  await setCourierTier(courierId, tier);
   return tier;
 }
 
@@ -537,39 +577,39 @@ export function refreshCourierTier(courierId: string): CourierTier {
  * Also appends a breadcrumb ping (courier_location_pings) so an order's
  * route can be replayed later; pings older than 24h are pruned on write.
  */
-export function updateCourierLocation(
+export async function updateCourierLocation(
   courierId: string,
   lat: number,
   lng: number,
   activeOrderId?: string | null
 ) {
   const ts = now();
-  db.prepare(
+  await db.prepare(
     `UPDATE courier_profiles SET last_lat = ?, last_lng = ?, last_location_at = ?, is_online = 1 WHERE id = ?`
   ).run(lat, lng, ts, courierId);
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO courier_location_pings (id, courier_id, order_id, lat, lng, created_at) VALUES (?, ?, ?, ?, ?, ?)`
   ).run(id(), courierId, activeOrderId ?? null, lat, lng, ts);
 
-  db.prepare(
+  await db.prepare(
     `DELETE FROM courier_location_pings WHERE courier_id = ? AND created_at < datetime('now', '-1 day')`
   ).run(courierId);
 }
 
-export function getCourierLocationTrail(courierId: string, orderId: string) {
-  return db
+export async function getCourierLocationTrail(courierId: string, orderId: string) {
+  return (await db
     .prepare(
-      `SELECT lat, lng, created_at as createdAt FROM courier_location_pings
+      `SELECT lat, lng, created_at as "createdAt" FROM courier_location_pings
        WHERE courier_id = ? AND order_id = ? ORDER BY created_at ASC`
     )
-    .all(courierId, orderId)
+    .all(courierId, orderId))
     .map(toPlain);
 }
 
 /** Rolling 14-day performance stats, used to compute the courier's tier. */
-export function computeCourierStats14d(courierId: string) {
-  const row = db
+export async function computeCourierStats14d(courierId: string) {
+  const row = await db
     .prepare(
       `SELECT
          COUNT(*) FILTER (WHERE status = 'DELIVERED') as delivered,
@@ -592,9 +632,9 @@ export function computeCourierStats14d(courierId: string) {
 // Admin profiles
 // ---------------------------------------------------------------------------
 
-export function createAdminProfile(input: { userId: string; permissions?: string[] }) {
+export async function createAdminProfile(input: { userId: string; permissions?: string[] }) {
   const profileId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO admin_profiles (id, user_id, permissions) VALUES (?, ?, ?)`
   ).run(profileId, input.userId, JSON.stringify(input.permissions ?? []));
   return profileId;
@@ -619,30 +659,30 @@ function mapZone(r: any) {
   };
 }
 
-export function createZone(input: {
+export async function createZone(input: {
   city: string;
   name: string;
   baseRateCents: number;
   perKmCents?: number;
 }) {
   const zoneId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO zones (id, city, name, base_rate_cents, per_km_cents, is_active, created_at)
      VALUES (?, ?, ?, ?, ?, 1, ?)`
   ).run(zoneId, input.city, input.name, input.baseRateCents, input.perKmCents ?? 0, now());
   return zoneId;
 }
 
-export function listActiveZones() {
-  return db.prepare(`SELECT * FROM zones WHERE is_active = 1 ORDER BY city ASC`).all().map(mapZone);
+export async function listActiveZones() {
+  return (await db.prepare(`SELECT * FROM zones WHERE is_active = 1 ORDER BY city ASC`).all()).map(mapZone);
 }
 
-export function listAllZones() {
-  return db.prepare(`SELECT * FROM zones ORDER BY city ASC`).all().map(mapZone);
+export async function listAllZones() {
+  return (await db.prepare(`SELECT * FROM zones ORDER BY city ASC`).all()).map(mapZone);
 }
 
-export function getZoneById(zoneId: string) {
-  return mapZone(db.prepare(`SELECT * FROM zones WHERE id = ?`).get(zoneId));
+export async function getZoneById(zoneId: string) {
+  return mapZone(await db.prepare(`SELECT * FROM zones WHERE id = ?`).get(zoneId));
 }
 
 // ---------------------------------------------------------------------------
@@ -730,56 +770,56 @@ const ORDER_SELECT = `
   LEFT JOIN users cu ON cu.id = c.user_id
 `;
 
-export function getOrderById(orderId: string) {
-  return mapOrder(db.prepare(`${ORDER_SELECT} WHERE o.id = ?`).get(orderId));
+export async function getOrderById(orderId: string) {
+  return mapOrder(await db.prepare(`${ORDER_SELECT} WHERE o.id = ?`).get(orderId));
 }
 
-export function listOrdersForMerchant(merchantId: string, limit = 100) {
-  return db
+export async function listOrdersForMerchant(merchantId: string, limit = 100) {
+  return (await db
     .prepare(`${ORDER_SELECT} WHERE o.merchant_id = ? ORDER BY o.created_at DESC LIMIT ?`)
-    .all(merchantId, limit)
+    .all(merchantId, limit))
     .map(mapOrder);
 }
 
-export function listPendingOrders(limit = 50) {
-  return db
+export async function listPendingOrders(limit = 50) {
+  return (await db
     .prepare(`${ORDER_SELECT} WHERE o.status = 'PENDING' ORDER BY o.created_at ASC LIMIT ?`)
-    .all(limit)
+    .all(limit))
     .map(mapOrder);
 }
 
-export function listActiveOrdersForCourier(courierId: string) {
-  return db
+export async function listActiveOrdersForCourier(courierId: string) {
+  return (await db
     .prepare(
       `${ORDER_SELECT} WHERE o.courier_id = ? AND o.status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT','RETURNING') ORDER BY o.assigned_at ASC`
     )
-    .all(courierId)
+    .all(courierId))
     .map(mapOrder);
 }
 
-export function listDeliveredOrdersForCourier(courierId: string, limit = 200) {
-  return db
+export async function listDeliveredOrdersForCourier(courierId: string, limit = 200) {
+  return (await db
     .prepare(
       `${ORDER_SELECT} WHERE o.courier_id = ? AND o.status = 'DELIVERED' ORDER BY o.delivered_at DESC LIMIT ?`
     )
-    .all(courierId, limit)
+    .all(courierId, limit))
     .map(mapOrder);
 }
 
 /** All orders currently "in flight" with a courier assigned — feeds the admin live map. */
-export function listActiveOrdersWithCourierLocation() {
-  return db
+export async function listActiveOrdersWithCourierLocation() {
+  return (await db
     .prepare(
       `${ORDER_SELECT} WHERE o.status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT') AND o.courier_id IS NOT NULL ORDER BY o.assigned_at ASC`
     )
-    .all()
+    .all())
     .map(mapOrder);
 }
 
-export function listAllOrders(limit = 200) {
-  return db
+export async function listAllOrders(limit = 200) {
+  return (await db
     .prepare(`${ORDER_SELECT} WHERE o.deleted_at IS NULL ORDER BY o.created_at DESC LIMIT ?`)
-    .all(limit)
+    .all(limit))
     .map(mapOrder);
 }
 
@@ -787,28 +827,28 @@ export function listAllOrders(limit = 200) {
  *  erasing it, so a wrong click doesn't destroy real delivery/payment
  *  history. Orders reference merchants/couriers by id, so nothing else
  *  breaks when one disappears from the live list. */
-export function softDeleteOrder(orderId: string, adminUserId: string) {
-  db.prepare(`UPDATE orders SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
+export async function softDeleteOrder(orderId: string, adminUserId: string) {
+  await db.prepare(`UPDATE orders SET deleted_at = ?, deleted_by = ? WHERE id = ?`).run(
     now(),
     adminUserId,
     orderId
   );
-  writeAudit(adminUserId, "order_deleted", "order", orderId);
+  await writeAudit(adminUserId, "order_deleted", "order", orderId);
 }
 
-export function restoreOrder(orderId: string, adminUserId: string) {
-  db.prepare(`UPDATE orders SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(orderId);
-  writeAudit(adminUserId, "order_restored", "order", orderId);
+export async function restoreOrder(orderId: string, adminUserId: string) {
+  await db.prepare(`UPDATE orders SET deleted_at = NULL, deleted_by = NULL WHERE id = ?`).run(orderId);
+  await writeAudit(adminUserId, "order_restored", "order", orderId);
 }
 
-export function listDeletedOrders(limit = 200) {
-  return db
+export async function listDeletedOrders(limit = 200) {
+  return (await db
     .prepare(`${ORDER_SELECT} WHERE o.deleted_at IS NOT NULL ORDER BY o.deleted_at DESC LIMIT ?`)
-    .all(limit)
+    .all(limit))
     .map(mapOrder);
 }
 
-export function createOrder(input: {
+export async function createOrder(input: {
   merchantId: string;
   zoneId: string;
   pickupAddress: string;
@@ -835,7 +875,7 @@ export function createOrder(input: {
   temperatureRequirement?: string | null;
 }) {
   const orderId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO orders (
       id, merchant_id, zone_id, pickup_address, pickup_lat, pickup_lng,
       dropoff_address, dropoff_lat, dropoff_lng, customer_name, customer_phone,
@@ -871,7 +911,7 @@ export function createOrder(input: {
   );
 
   if (input.requiresAgeVerification || input.temperatureRequirement) {
-    db.prepare(
+    await db.prepare(
       `UPDATE orders SET requires_age_verification = ?, temperature_requirement = ? WHERE id = ?`
     ).run(
       input.requiresAgeVerification ? 1 : 0,
@@ -880,7 +920,7 @@ export function createOrder(input: {
     );
   }
 
-  logEvent(orderId, "order_created", { status: "PENDING" });
+  await logEvent(orderId, "order_created", { status: "PENDING" });
   return orderId;
 }
 
@@ -889,15 +929,15 @@ export function createOrder(input: {
  * (the UPDATE is conditional on status = 'PENDING', so two couriers racing
  * on the same order can't both win).
  */
-export function acceptOrder(orderId: string, courierId: string) {
-  const result = db
+export async function acceptOrder(orderId: string, courierId: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET courier_id = ?, status = 'ASSIGNED', assigned_at = ? WHERE id = ? AND status = 'PENDING'`
     )
     .run(courierId, now(), orderId);
   if (result.changes > 0) {
-    markOffersResolvedForOrder(orderId, courierId);
-    logEvent(orderId, "courier_assigned", { courierId });
+    await markOffersResolvedForOrder(orderId, courierId);
+    await logEvent(orderId, "courier_assigned", { courierId });
   }
   return result.changes > 0;
 }
@@ -907,54 +947,54 @@ export function acceptOrder(orderId: string, courierId: string) {
  * targeted offer, or the order has fallen through to broadcast mode where
  * any approved online courier can grab it.
  */
-export function canCourierAcceptOrder(orderId: string, courierId: string) {
-  const order = getOrderById(orderId);
+export async function canCourierAcceptOrder(orderId: string, courierId: string) {
+  const order = await getOrderById(orderId);
   if (!order || order.status !== "PENDING") return false;
   if (order.dispatchMode === "broadcast") return true;
-  return courierHasActiveOffer(orderId, courierId);
+  return await courierHasActiveOffer(orderId, courierId);
 }
 
-export function markOrderPickedUp(orderId: string, courierId: string) {
-  const result = db
+export async function markOrderPickedUp(orderId: string, courierId: string) {
+  const result = await db
     .prepare(
-      `UPDATE orders SET status = 'PICKED_UP', picked_up_at = ? WHERE id = ? AND courier_id = ?`
+      `UPDATE orders SET status = 'PICKED_UP', picked_up_at = ? WHERE id = ? AND courier_id = ? AND status = 'ASSIGNED'`
     )
     .run(now(), orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "status_change", { status: "PICKED_UP" });
+  if (result.changes > 0) await logEvent(orderId, "status_change", { status: "PICKED_UP" });
   return result.changes > 0;
 }
 
-export function markOrderInTransit(orderId: string, courierId: string) {
-  const result = db
-    .prepare(`UPDATE orders SET status = 'IN_TRANSIT' WHERE id = ? AND courier_id = ?`)
+export async function markOrderInTransit(orderId: string, courierId: string) {
+  const result = await db
+    .prepare(`UPDATE orders SET status = 'IN_TRANSIT' WHERE id = ? AND courier_id = ? AND status = 'PICKED_UP'`)
     .run(orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "status_change", { status: "IN_TRANSIT" });
+  if (result.changes > 0) await logEvent(orderId, "status_change", { status: "IN_TRANSIT" });
   return result.changes > 0;
 }
 
-export function markOrderDelivered(orderId: string, courierId: string, proofUrl: string) {
-  const result = db
+export async function markOrderDelivered(orderId: string, courierId: string, proofUrl: string) {
+  const result = await db
     .prepare(
-      `UPDATE orders SET status = 'DELIVERED', delivered_at = ?, proof_of_delivery_url = ? WHERE id = ? AND courier_id = ?`
+      `UPDATE orders SET status = 'DELIVERED', delivered_at = ?, proof_of_delivery_url = ? WHERE id = ? AND courier_id = ? AND status IN ('PICKED_UP','IN_TRANSIT')`
     )
     .run(now(), proofUrl, orderId, courierId);
   if (result.changes > 0) {
-    logEvent(orderId, "status_change", { status: "DELIVERED" });
-    refreshCourierTier(courierId);
-    const order = getOrderById(orderId);
-    if (order) awardLoyaltyPointsForOrder(order);
+    await logEvent(orderId, "status_change", { status: "DELIVERED" });
+    await refreshCourierTier(courierId);
+    const order = await getOrderById(orderId);
+    if (order) await awardLoyaltyPointsForOrder(order);
   }
   return result.changes > 0;
 }
 
-export function markOrderFailed(orderId: string, courierId: string, reason: string) {
-  const result = db
-    .prepare(`UPDATE orders SET status = 'FAILED' WHERE id = ? AND courier_id = ?`)
+export async function markOrderFailed(orderId: string, courierId: string, reason: string) {
+  const result = await db
+    .prepare(`UPDATE orders SET status = 'FAILED' WHERE id = ? AND courier_id = ? AND status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT')`)
     .run(orderId, courierId);
   if (result.changes > 0) {
-    logEvent(orderId, "status_change", { status: "FAILED", reason });
+    await logEvent(orderId, "status_change", { status: "FAILED", reason });
     // A failed drop moves the completion rate, which can move the tier too.
-    refreshCourierTier(courierId);
+    await refreshCourierTier(courierId);
   }
   return result.changes > 0;
 }
@@ -972,16 +1012,16 @@ const CANCELLABLE_STATUSES = ["PENDING", "ASSIGNED"];
  * cancellation itself doesn't owe money back — refund_status only moves to
  * 'pending' when the caller says the merchant was actually charged for it.
  */
-export function cancelOrder(
+export async function cancelOrder(
   orderId: string,
   actorUserId: string,
   reason: string,
   opts?: { wasCharged?: boolean }
 ) {
-  const order = getOrderById(orderId);
+  const order = await getOrderById(orderId);
   if (!order || !CANCELLABLE_STATUSES.includes(order.status)) return false;
 
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE orders SET status = 'CANCELLED', cancelled_at = ?, cancelled_by = ?, cancel_reason = ?,
               refund_status = CASE WHEN ? THEN 'pending' ELSE refund_status END
@@ -990,32 +1030,32 @@ export function cancelOrder(
     .run(now(), actorUserId, reason, opts?.wasCharged ? 1 : 0, orderId);
 
   if (result.changes > 0) {
-    logEvent(orderId, "status_change", { status: "CANCELLED", reason });
-    db.prepare(`UPDATE offers SET status = 'expired', responded_at = ? WHERE order_id = ? AND status = 'offered'`).run(
+    await logEvent(orderId, "status_change", { status: "CANCELLED", reason });
+    await db.prepare(`UPDATE offers SET status = 'expired', responded_at = ? WHERE order_id = ? AND status = 'offered'`).run(
       now(),
       orderId
     );
     if (order.batchId) {
-      db.prepare(`UPDATE orders SET batch_id = NULL, batch_sequence = NULL WHERE id = ?`).run(orderId);
+      await db.prepare(`UPDATE orders SET batch_id = NULL, batch_sequence = NULL WHERE id = ?`).run(orderId);
       const remaining = (
-        db.prepare(`SELECT COUNT(*) as n FROM orders WHERE batch_id = ?`).get(order.batchId) as any
+        await db.prepare(`SELECT COUNT(*) as n FROM orders WHERE batch_id = ?`).get(order.batchId) as any
       ).n;
-      db.prepare(`UPDATE batches SET stop_count = ? WHERE id = ?`).run(remaining, order.batchId);
+      await db.prepare(`UPDATE batches SET stop_count = ? WHERE id = ?`).run(remaining, order.batchId);
     }
-    writeAudit(actorUserId, "order_cancelled", "order", orderId, reason);
+    await writeAudit(actorUserId, "order_cancelled", "order", orderId, reason);
   }
   return result.changes > 0;
 }
 
 /** Admin settles a refund owed on a cancelled (or otherwise problem) order. */
-export function setOrderRefund(
+export async function setOrderRefund(
   orderId: string,
   adminUserId: string,
   status: "refunded" | "denied",
   amountCents?: number,
   note?: string
 ) {
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE orders SET refund_status = ?, refund_amount_cents = ?, refund_note = ?,
               refunded_at = CASE WHEN ? = 'refunded' THEN ? ELSE refunded_at END
@@ -1023,14 +1063,14 @@ export function setOrderRefund(
     )
     .run(status, amountCents ?? null, note ?? null, status, now(), orderId);
   if (result.changes > 0) {
-    writeAudit(adminUserId, `refund_${status}`, "order", orderId, note ?? (amountCents ? `$${(amountCents / 100).toFixed(2)}` : undefined));
+    await writeAudit(adminUserId, `refund_${status}`, "order", orderId, note ?? (amountCents ? `$${(amountCents / 100).toFixed(2)}` : undefined));
   }
   return result.changes > 0;
 }
 
 /** Customer rating — no auth required, the order id (tracking link) is the access key. */
-export function submitOrderRating(orderId: string, rating: number, comment?: string) {
-  const result = db
+export async function submitOrderRating(orderId: string, rating: number, comment?: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET customer_rating = ?, customer_comment = ? WHERE id = ? AND status = 'DELIVERED' AND customer_rating IS NULL`
     )
@@ -1038,19 +1078,19 @@ export function submitOrderRating(orderId: string, rating: number, comment?: str
 
   if (result.changes > 0) {
     // Roll the rating into the courier's running average.
-    const order = getOrderById(orderId);
+    const order = await getOrderById(orderId);
     if (order?.courierId) {
-      const agg = db
+      const agg = await db
         .prepare(`SELECT AVG(customer_rating) as avg FROM orders WHERE courier_id = ? AND customer_rating IS NOT NULL`)
         .get(order.courierId) as any;
       if (agg?.avg) {
-        db.prepare(`UPDATE courier_profiles SET rating = ? WHERE id = ?`).run(
+        await db.prepare(`UPDATE courier_profiles SET rating = ? WHERE id = ?`).run(
           Math.round(agg.avg * 10) / 10,
           order.courierId
         );
       }
     }
-    logEvent(orderId, "customer_rated", { rating, comment });
+    await logEvent(orderId, "customer_rated", { rating, comment });
   }
   return result.changes > 0;
 }
@@ -1059,35 +1099,35 @@ export function submitOrderRating(orderId: string, rating: number, comment?: str
 // Offers (the auto-dispatch queue)
 // ---------------------------------------------------------------------------
 
-export function createOffer(orderId: string, courierId: string, expiresInSeconds: number) {
+export async function createOffer(orderId: string, courierId: string, expiresInSeconds: number) {
   const offerId = id();
   const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO offers (id, order_id, courier_id, status, expires_at, created_at)
      VALUES (?, ?, ?, 'offered', ?, ?)`
   ).run(offerId, orderId, courierId, expiresAt, now());
-  logEvent(orderId, "offer_sent", { courierId, expiresAt });
+  await logEvent(orderId, "offer_sent", { courierId, expiresAt });
   return offerId;
 }
 
 /** Marks any 'offered' row whose timer has run out as expired. Returns how many. */
-export function expireStaleOffers() {
-  const result = db
+export async function expireStaleOffers() {
+  const result = await db
     .prepare(`UPDATE offers SET status = 'expired', responded_at = ? WHERE status = 'offered' AND expires_at < ?`)
     .run(now(), now());
   return result.changes as number;
 }
 
-export function getActiveOfferForOrder(orderId: string) {
-  const r = db
+export async function getActiveOfferForOrder(orderId: string) {
+  const r = await db
     .prepare(`SELECT * FROM offers WHERE order_id = ? AND status = 'offered' AND expires_at >= ? LIMIT 1`)
     .get(orderId, now()) as any;
   return r ? toPlain(r) : null;
 }
 
 /** The offers a courier is currently being shown, newest first. */
-export function listActiveOffersForCourier(courierId: string) {
-  return db
+export async function listActiveOffersForCourier(courierId: string) {
+  return (await db
     .prepare(
       // Joins zones/merchant the same way ORDER_SELECT does, so a targeted
       // offer shows the zone name just like a broadcast one.
@@ -1100,7 +1140,7 @@ export function listActiveOffersForCourier(courierId: string) {
        WHERE f.courier_id = ? AND f.status = 'offered' AND f.expires_at >= ? AND o.status = 'PENDING'
        ORDER BY f.created_at ASC`
     )
-    .all(courierId, now())
+    .all(courierId, now()))
     .map((r: any) => ({
       ...(mapOrder(r) as any),
       offerId: r.offer_id,
@@ -1108,8 +1148,8 @@ export function listActiveOffersForCourier(courierId: string) {
     }));
 }
 
-export function declineOffer(offerId: string, courierId: string) {
-  const result = db
+export async function declineOffer(offerId: string, courierId: string) {
+  const result = await db
     .prepare(
       `UPDATE offers SET status = 'declined', responded_at = ? WHERE id = ? AND courier_id = ? AND status = 'offered'`
     )
@@ -1117,8 +1157,8 @@ export function declineOffer(offerId: string, courierId: string) {
   return result.changes > 0;
 }
 
-export function markOffersResolvedForOrder(orderId: string, acceptedCourierId: string) {
-  db.prepare(
+export async function markOffersResolvedForOrder(orderId: string, acceptedCourierId: string) {
+  await db.prepare(
     `UPDATE offers SET status = CASE WHEN courier_id = ? THEN 'accepted' ELSE 'expired' END,
                        responded_at = ?
      WHERE order_id = ? AND status = 'offered'`
@@ -1126,15 +1166,15 @@ export function markOffersResolvedForOrder(orderId: string, acceptedCourierId: s
 }
 
 /** Courier ids that have already been offered this order (any outcome). */
-export function courierIdsAlreadyOffered(orderId: string): string[] {
-  return (db.prepare(`SELECT DISTINCT courier_id FROM offers WHERE order_id = ?`).all(orderId) as any[]).map(
+export async function courierIdsAlreadyOffered(orderId: string): Promise<string[]> {
+  return (await db.prepare(`SELECT DISTINCT courier_id FROM offers WHERE order_id = ?`).all(orderId) as any[]).map(
     (r) => r.courier_id
   );
 }
 
 /** Does this courier hold a live offer for this order? */
-export function courierHasActiveOffer(orderId: string, courierId: string) {
-  const r = db
+export async function courierHasActiveOffer(orderId: string, courierId: string) {
+  const r = await db
     .prepare(
       `SELECT 1 as ok FROM offers WHERE order_id = ? AND courier_id = ? AND status = 'offered' AND expires_at >= ?`
     )
@@ -1142,9 +1182,9 @@ export function courierHasActiveOffer(orderId: string, courierId: string) {
   return !!r;
 }
 
-export function setOrderDispatchMode(orderId: string, mode: "auto" | "broadcast" | "manual") {
-  db.prepare(`UPDATE orders SET dispatch_mode = ? WHERE id = ?`).run(mode, orderId);
-  logEvent(orderId, "dispatch_mode", { mode });
+export async function setOrderDispatchMode(orderId: string, mode: "auto" | "broadcast" | "manual") {
+  await db.prepare(`UPDATE orders SET dispatch_mode = ? WHERE id = ?`).run(mode, orderId);
+  await logEvent(orderId, "dispatch_mode", { mode });
 }
 
 /**
@@ -1152,9 +1192,9 @@ export function setOrderDispatchMode(orderId: string, mode: "auto" | "broadcast"
  * either no scheduled window or the window is close enough to start
  * dispatching (default: 90 minutes ahead).
  */
-export function ordersNeedingDispatch(leadMinutes = 90) {
+export async function ordersNeedingDispatch(leadMinutes = 90) {
   const cutoff = new Date(Date.now() + leadMinutes * 60 * 1000).toISOString();
-  return db
+  return (await db
     .prepare(
       `${ORDER_SELECT}
        WHERE o.status = 'PENDING'
@@ -1167,7 +1207,7 @@ export function ordersNeedingDispatch(leadMinutes = 90) {
        ORDER BY o.created_at ASC
        LIMIT 25`
     )
-    .all(cutoff, now())
+    .all(cutoff, now()))
     .map(mapOrder);
 }
 
@@ -1175,10 +1215,10 @@ export function ordersNeedingDispatch(leadMinutes = 90) {
  * Couriers eligible for a given order: online, approved, not suspended,
  * under the concurrent-delivery cap, and not already offered this order.
  */
-export function candidateCouriersForOrder(orderId: string, maxConcurrent = 3) {
-  const excluded = courierIdsAlreadyOffered(orderId);
+export async function candidateCouriersForOrder(orderId: string, maxConcurrent = 3) {
+  const excluded = await courierIdsAlreadyOffered(orderId);
   const placeholders = excluded.map(() => "?").join(",");
-  return db
+  return (await db
     .prepare(
       `SELECT c.*, u.email as email, u.status as user_status
        FROM courier_profiles c
@@ -1191,17 +1231,17 @@ export function candidateCouriersForOrder(orderId: string, maxConcurrent = 3) {
                 AND o.status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT')) < ?
          ${excluded.length ? `AND c.id NOT IN (${placeholders})` : ""}`
     )
-    .all(maxConcurrent, ...excluded)
+    .all(maxConcurrent, ...excluded))
     .map(mapCourier);
 }
 
-export function setOrderRouteInfo(
+export async function setOrderRouteInfo(
   orderId: string,
   distanceKm: number,
   source: string,
   etaMinutes: number
 ) {
-  db.prepare(`UPDATE orders SET distance_km = ?, distance_source = ?, eta_minutes = ? WHERE id = ?`).run(
+  await db.prepare(`UPDATE orders SET distance_km = ?, distance_source = ?, eta_minutes = ? WHERE id = ?`).run(
     distanceKm,
     source,
     etaMinutes,
@@ -1213,38 +1253,38 @@ export function setOrderRouteInfo(
 // Failed delivery / return-to-merchant
 // ---------------------------------------------------------------------------
 
-export function markOrderReturning(orderId: string, courierId: string, reason: string) {
-  const result = db
+export async function markOrderReturning(orderId: string, courierId: string, reason: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET status = 'RETURNING', failure_reason = ? WHERE id = ? AND courier_id = ? AND status IN ('PICKED_UP','IN_TRANSIT')`
     )
     .run(reason, orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "status_change", { status: "RETURNING", reason });
+  if (result.changes > 0) await logEvent(orderId, "status_change", { status: "RETURNING", reason });
   return result.changes > 0;
 }
 
-export function markOrderReturned(orderId: string, courierId: string) {
-  const result = db
+export async function markOrderReturned(orderId: string, courierId: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET status = 'RETURNED', returned_at = ? WHERE id = ? AND courier_id = ? AND status = 'RETURNING'`
     )
     .run(now(), orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "status_change", { status: "RETURNED" });
+  if (result.changes > 0) await logEvent(orderId, "status_change", { status: "RETURNED" });
   return result.changes > 0;
 }
 
 /** Admin force-assign (manual dispatch override). */
-export function adminAssignOrder(orderId: string, courierId: string, adminUserId: string) {
-  const result = db
+export async function adminAssignOrder(orderId: string, courierId: string, adminUserId: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET courier_id = ?, status = 'ASSIGNED', assigned_at = ?, dispatch_mode = 'manual'
        WHERE id = ? AND status IN ('PENDING','ASSIGNED')`
     )
     .run(courierId, now(), orderId);
   if (result.changes > 0) {
-    markOffersResolvedForOrder(orderId, courierId);
-    logEvent(orderId, "admin_assigned", { courierId, adminUserId });
-    writeAudit(adminUserId, "order_assigned", "order", orderId, `courier ${courierId}`);
+    await markOffersResolvedForOrder(orderId, courierId);
+    await logEvent(orderId, "admin_assigned", { courierId, adminUserId });
+    await writeAudit(adminUserId, "order_assigned", "order", orderId, `courier ${courierId}`);
   }
   return result.changes > 0;
 }
@@ -1256,17 +1296,17 @@ export function adminAssignOrder(orderId: string, courierId: string, adminUserId
  * earlier would be permanently excluded and it would go straight to
  * broadcast.
  */
-export function adminUnassignOrder(orderId: string, adminUserId: string) {
-  const result = db
+export async function adminUnassignOrder(orderId: string, adminUserId: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET courier_id = NULL, status = 'PENDING', assigned_at = NULL, dispatch_mode = 'auto'
        WHERE id = ? AND status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT')`
     )
     .run(orderId);
   if (result.changes > 0) {
-    db.prepare(`DELETE FROM offers WHERE order_id = ?`).run(orderId);
-    logEvent(orderId, "admin_unassigned", { adminUserId });
-    writeAudit(adminUserId, "order_unassigned", "order", orderId);
+    await db.prepare(`DELETE FROM offers WHERE order_id = ?`).run(orderId);
+    await logEvent(orderId, "admin_unassigned", { adminUserId });
+    await writeAudit(adminUserId, "order_unassigned", "order", orderId);
   }
   return result.changes > 0;
 }
@@ -1275,27 +1315,27 @@ export function adminUnassignOrder(orderId: string, adminUserId: string) {
 // Messages — one thread per order (customer ↔ courier, merchant can see it)
 // ---------------------------------------------------------------------------
 
-export function addMessage(input: {
+export async function addMessage(input: {
   orderId: string;
   senderRole: "customer" | "courier" | "merchant" | "admin";
   senderUserId?: string | null;
   body: string;
 }) {
   const messageId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO messages (id, order_id, sender_role, sender_user_id, body, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(messageId, input.orderId, input.senderRole, input.senderUserId ?? null, input.body, now());
   return messageId;
 }
 
-export function listMessages(orderId: string) {
-  return db
+export async function listMessages(orderId: string) {
+  return (await db
     .prepare(
-      `SELECT id, order_id as orderId, sender_role as senderRole, body, created_at as createdAt
+      `SELECT id, order_id as "orderId", sender_role as "senderRole", body, created_at as "createdAt"
        FROM messages WHERE order_id = ? ORDER BY created_at ASC LIMIT 500`
     )
-    .all(orderId)
+    .all(orderId))
     .map(toPlain) as any[];
 }
 
@@ -1303,21 +1343,21 @@ export function listMessages(orderId: string) {
 // Notifications log
 // ---------------------------------------------------------------------------
 
-export function listNotifications(limit = 100) {
-  return db
+export async function listNotifications(limit = 100) {
+  return (await db
     .prepare(
-      `SELECT n.*, o.customer_name as customerName FROM notifications n
+      `SELECT n.*, o.customer_name as "customerName" FROM notifications n
        LEFT JOIN orders o ON o.id = n.order_id
        ORDER BY n.created_at DESC LIMIT ?`
     )
-    .all(limit)
+    .all(limit))
     .map(toPlain) as any[];
 }
 
-export function listNotificationsForOrder(orderId: string) {
-  return db
+export async function listNotificationsForOrder(orderId: string) {
+  return (await db
     .prepare(`SELECT * FROM notifications WHERE order_id = ? ORDER BY created_at DESC`)
-    .all(orderId)
+    .all(orderId))
     .map(toPlain) as any[];
 }
 
@@ -1327,23 +1367,23 @@ export function listNotificationsForOrder(orderId: string) {
 
 /** Courier taps "I'm at the pickup" — this timestamp is what makes the
  *  merchant's pickup wait time measurable. */
-export function markArrivedAtPickup(orderId: string, courierId: string) {
-  const result = db
+export async function markArrivedAtPickup(orderId: string, courierId: string) {
+  const result = await db
     .prepare(
       `UPDATE orders SET arrived_at_pickup = ? WHERE id = ? AND courier_id = ? AND arrived_at_pickup IS NULL`
     )
     .run(now(), orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "arrived_at_pickup", {});
+  if (result.changes > 0) await logEvent(orderId, "arrived_at_pickup", {});
   return result.changes > 0;
 }
 
-export function submitMerchantRating(
+export async function submitMerchantRating(
   orderId: string,
   courierId: string,
   rating: number,
   comment?: string
 ) {
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE orders SET merchant_rating = ?, merchant_rating_comment = ?
        WHERE id = ? AND courier_id = ? AND merchant_rating IS NULL
@@ -1352,21 +1392,21 @@ export function submitMerchantRating(
     .run(rating, comment ?? null, orderId, courierId);
 
   if (result.changes > 0) {
-    const order = getOrderById(orderId);
+    const order = await getOrderById(orderId);
     if (order?.merchantId) {
-      const agg = db
+      const agg = await db
         .prepare(
           `SELECT AVG(merchant_rating) as avg FROM orders WHERE merchant_id = ? AND merchant_rating IS NOT NULL`
         )
         .get(order.merchantId) as any;
       if (agg?.avg) {
-        db.prepare(`UPDATE merchant_profiles SET rating = ? WHERE id = ?`).run(
+        await db.prepare(`UPDATE merchant_profiles SET rating = ? WHERE id = ?`).run(
           Math.round(agg.avg * 10) / 10,
           order.merchantId
         );
       }
     }
-    logEvent(orderId, "merchant_rated", { rating, comment });
+    await logEvent(orderId, "merchant_rated", { rating, comment });
   }
   return result.changes > 0;
 }
@@ -1376,12 +1416,12 @@ export function submitMerchantRating(
  * and the parcel actually being handed over. This is the number that tells
  * you which merchants are quietly costing you courier hours.
  */
-export function merchantPickupStats(merchantId: string) {
-  const row = db
+export async function merchantPickupStats(merchantId: string) {
+  const row = await db
     .prepare(
       `SELECT
          COUNT(*) as samples,
-         AVG((julianday(picked_up_at) - julianday(arrived_at_pickup)) * 24 * 60) as avgWaitMinutes
+         AVG(EXTRACT(EPOCH FROM (replace(picked_up_at, 'T', ' ')::timestamp - replace(arrived_at_pickup, 'T', ' ')::timestamp)) / 60.0) as "avgWaitMinutes"
        FROM orders
        WHERE merchant_id = ? AND arrived_at_pickup IS NOT NULL AND picked_up_at IS NOT NULL`
     )
@@ -1396,32 +1436,32 @@ export function merchantPickupStats(merchantId: string) {
 // Batches (multi-stop routes)
 // ---------------------------------------------------------------------------
 
-export function createBatch(input: {
+export async function createBatch(input: {
   zoneId: string;
   orderIds: string[];
   totalKm: number;
   totalCourierFeeCents: number;
 }) {
   const batchId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO batches (id, zone_id, status, stop_count, total_km, total_courier_fee_cents, created_at)
      VALUES (?, ?, 'open', ?, ?, ?, ?)`
   ).run(batchId, input.zoneId, input.orderIds.length, input.totalKm, input.totalCourierFeeCents, now());
 
-  input.orderIds.forEach((orderId, index) => {
-    db.prepare(`UPDATE orders SET batch_id = ?, batch_sequence = ? WHERE id = ?`).run(
+  for (const [index, orderId] of input.orderIds.entries()) {
+    await db.prepare(`UPDATE orders SET batch_id = ?, batch_sequence = ? WHERE id = ?`).run(
       batchId,
       index + 1,
       orderId
     );
-    logEvent(orderId, "batched", { batchId, sequence: index + 1 });
-  });
+    await logEvent(orderId, "batched", { batchId, sequence: index + 1 });
+  }
 
   return batchId;
 }
 
-export function getBatchById(batchId: string) {
-  const r = db.prepare(`SELECT * FROM batches WHERE id = ?`).get(batchId) as any;
+export async function getBatchById(batchId: string) {
+  const r = await db.prepare(`SELECT * FROM batches WHERE id = ?`).get(batchId) as any;
   if (!r) return null;
   return {
     id: r.id,
@@ -1436,50 +1476,50 @@ export function getBatchById(batchId: string) {
   };
 }
 
-export function listOpenBatches() {
-  return db
+export async function listOpenBatches() {
+  return (await db
     .prepare(`SELECT * FROM batches WHERE status = 'open' ORDER BY created_at ASC`)
-    .all()
+    .all())
     .map(toPlain) as any[];
 }
 
-export function listOrdersInBatch(batchId: string) {
-  return db
+export async function listOrdersInBatch(batchId: string) {
+  return (await db
     .prepare(`${ORDER_SELECT} WHERE o.batch_id = ? ORDER BY o.batch_sequence ASC`)
-    .all(batchId)
+    .all(batchId))
     .map(mapOrder);
 }
 
 /** Courier takes an entire multi-stop route in one tap. */
-export function assignBatchToCourier(batchId: string, courierId: string) {
-  const result = db
+export async function assignBatchToCourier(batchId: string, courierId: string) {
+  const result = await db
     .prepare(`UPDATE batches SET courier_id = ?, status = 'assigned', assigned_at = ? WHERE id = ? AND status = 'open'`)
     .run(courierId, now(), batchId);
   if (result.changes === 0) return false;
 
-  const orders = listOrdersInBatch(batchId);
+  const orders = await listOrdersInBatch(batchId);
   for (const o of orders) {
     if (o!.status === "PENDING") {
-      db.prepare(
+      await db.prepare(
         `UPDATE orders SET courier_id = ?, status = 'ASSIGNED', assigned_at = ? WHERE id = ? AND status = 'PENDING'`
       ).run(courierId, now(), o!.id);
-      markOffersResolvedForOrder(o!.id, courierId);
-      logEvent(o!.id, "courier_assigned", { courierId, viaBatch: batchId });
+      await markOffersResolvedForOrder(o!.id, courierId);
+      await logEvent(o!.id, "courier_assigned", { courierId, viaBatch: batchId });
     }
   }
   return true;
 }
 
 /** Pending, un-batched orders — the input to the batching pass. */
-export function listBatchableOrders(limit = 100) {
-  return db
+export async function listBatchableOrders(limit = 100) {
+  return (await db
     .prepare(
       `${ORDER_SELECT}
        WHERE o.status = 'PENDING' AND o.courier_id IS NULL AND o.batch_id IS NULL
          AND o.service_type IN ('BATCH','NEXT_DAY')
        ORDER BY o.created_at ASC LIMIT ?`
     )
-    .all(limit)
+    .all(limit))
     .map(mapOrder);
 }
 
@@ -1487,20 +1527,20 @@ export function listBatchableOrders(limit = 100) {
 // Surge pricing
 // ---------------------------------------------------------------------------
 
-export function setZoneSurge(zoneId: string, multiplier: number, note: string | null, adminUserId: string) {
-  db.prepare(`UPDATE zones SET surge_multiplier = ?, surge_note = ? WHERE id = ?`).run(
+export async function setZoneSurge(zoneId: string, multiplier: number, note: string | null, adminUserId: string) {
+  await db.prepare(`UPDATE zones SET surge_multiplier = ?, surge_note = ? WHERE id = ?`).run(
     multiplier,
     note,
     zoneId
   );
-  writeAudit(adminUserId, "zone_surge_set", "zone", zoneId, `x${multiplier} ${note ?? ""}`);
+  await writeAudit(adminUserId, "zone_surge_set", "zone", zoneId, `x${multiplier} ${note ?? ""}`);
 }
 
 // ---------------------------------------------------------------------------
 // Merchant API keys + webhooks
 // ---------------------------------------------------------------------------
 
-export function createApiKey(input: {
+export async function createApiKey(input: {
   merchantId: string;
   name: string;
   keyPrefix: string;
@@ -1508,53 +1548,53 @@ export function createApiKey(input: {
   webhookUrl?: string | null;
 }) {
   const keyId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO api_keys (id, merchant_id, name, key_prefix, key_hash, webhook_url, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(keyId, input.merchantId, input.name, input.keyPrefix, input.keyHash, input.webhookUrl ?? null, now());
   return keyId;
 }
 
-export function listApiKeys(merchantId: string) {
-  return db
+export async function listApiKeys(merchantId: string) {
+  return (await db
     .prepare(
-      `SELECT id, name, key_prefix as keyPrefix, webhook_url as webhookUrl,
-              last_used_at as lastUsedAt, revoked_at as revokedAt, created_at as createdAt
+      `SELECT id, name, key_prefix as "keyPrefix", webhook_url as "webhookUrl",
+              last_used_at as "lastUsedAt", revoked_at as "revokedAt", created_at as "createdAt"
        FROM api_keys WHERE merchant_id = ? ORDER BY created_at DESC`
     )
-    .all(merchantId)
+    .all(merchantId))
     .map(toPlain) as any[];
 }
 
-export function findApiKeyByHash(keyHash: string) {
-  const r = db
+export async function findApiKeyByHash(keyHash: string) {
+  const r = await db
     .prepare(`SELECT * FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL`)
     .get(keyHash) as any;
   return r ? toPlain(r) : null;
 }
 
-export function touchApiKey(keyId: string) {
-  db.prepare(`UPDATE api_keys SET last_used_at = ? WHERE id = ?`).run(now(), keyId);
+export async function touchApiKey(keyId: string) {
+  await db.prepare(`UPDATE api_keys SET last_used_at = ? WHERE id = ?`).run(now(), keyId);
 }
 
-export function revokeApiKey(keyId: string, merchantId: string) {
-  const result = db
+export async function revokeApiKey(keyId: string, merchantId: string) {
+  const result = await db
     .prepare(`UPDATE api_keys SET revoked_at = ? WHERE id = ? AND merchant_id = ? AND revoked_at IS NULL`)
     .run(now(), keyId, merchantId);
   return result.changes > 0;
 }
 
-export function setWebhookUrl(keyId: string, merchantId: string, url: string | null) {
-  db.prepare(`UPDATE api_keys SET webhook_url = ? WHERE id = ? AND merchant_id = ?`).run(
+export async function setWebhookUrl(keyId: string, merchantId: string, url: string | null) {
+  await db.prepare(`UPDATE api_keys SET webhook_url = ? WHERE id = ? AND merchant_id = ?`).run(
     url,
     keyId,
     merchantId
   );
 }
 
-export function webhookUrlsForMerchant(merchantId: string): string[] {
+export async function webhookUrlsForMerchant(merchantId: string): Promise<string[]> {
   return (
-    db
+    await db
       .prepare(
         `SELECT DISTINCT webhook_url FROM api_keys
          WHERE merchant_id = ? AND revoked_at IS NULL AND webhook_url IS NOT NULL`
@@ -1563,7 +1603,7 @@ export function webhookUrlsForMerchant(merchantId: string): string[] {
   ).map((r) => r.webhook_url);
 }
 
-export function recordWebhookDelivery(input: {
+export async function recordWebhookDelivery(input: {
   merchantId: string;
   orderId?: string | null;
   event: string;
@@ -1572,7 +1612,7 @@ export function recordWebhookDelivery(input: {
   responseCode?: number | null;
   error?: string | null;
 }) {
-  db.prepare(
+  await db.prepare(
     `INSERT INTO webhook_deliveries (id, merchant_id, order_id, event, url, status, response_code, error, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
@@ -1588,10 +1628,10 @@ export function recordWebhookDelivery(input: {
   );
 }
 
-export function listWebhookDeliveries(merchantId: string, limit = 50) {
-  return db
+export async function listWebhookDeliveries(merchantId: string, limit = 50) {
+  return (await db
     .prepare(`SELECT * FROM webhook_deliveries WHERE merchant_id = ? ORDER BY created_at DESC LIMIT ?`)
-    .all(merchantId, limit)
+    .all(merchantId, limit))
     .map(toPlain) as any[];
 }
 
@@ -1599,9 +1639,9 @@ export function listWebhookDeliveries(merchantId: string, limit = 50) {
 // Recurring deliveries
 // ---------------------------------------------------------------------------
 
-export function createRecurringOrder(input: any) {
+export async function createRecurringOrder(input: any) {
   const recurringId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO recurring_orders
       (id, merchant_id, zone_id, label, pickup_address, pickup_lat, pickup_lng,
        dropoff_address, dropoff_lat, dropoff_lng, customer_name, customer_phone,
@@ -1632,33 +1672,33 @@ export function createRecurringOrder(input: any) {
   return recurringId;
 }
 
-export function listRecurringOrders(merchantId: string) {
-  return db
+export async function listRecurringOrders(merchantId: string) {
+  return (await db
     .prepare(`SELECT * FROM recurring_orders WHERE merchant_id = ? ORDER BY created_at DESC`)
-    .all(merchantId)
+    .all(merchantId))
     .map(toPlain) as any[];
 }
 
-export function listActiveRecurringOrders() {
-  return db.prepare(`SELECT * FROM recurring_orders WHERE active = 1`).all().map(toPlain) as any[];
+export async function listActiveRecurringOrders() {
+  return (await db.prepare(`SELECT * FROM recurring_orders WHERE active = 1`).all()).map(toPlain) as any[];
 }
 
-export function setRecurringActive(recurringId: string, merchantId: string, active: boolean) {
-  const result = db
+export async function setRecurringActive(recurringId: string, merchantId: string, active: boolean) {
+  const result = await db
     .prepare(`UPDATE recurring_orders SET active = ? WHERE id = ? AND merchant_id = ?`)
     .run(active ? 1 : 0, recurringId, merchantId);
   return result.changes > 0;
 }
 
-export function markRecurringGenerated(recurringId: string, dateStr: string) {
-  db.prepare(`UPDATE recurring_orders SET last_generated_date = ? WHERE id = ?`).run(dateStr, recurringId);
+export async function markRecurringGenerated(recurringId: string, dateStr: string) {
+  await db.prepare(`UPDATE recurring_orders SET last_generated_date = ? WHERE id = ?`).run(dateStr, recurringId);
 }
 
 // ---------------------------------------------------------------------------
 // Challenges (courier bonus campaigns)
 // ---------------------------------------------------------------------------
 
-export function createChallenge(input: {
+export async function createChallenge(input: {
   title: string;
   description?: string;
   targetDeliveries: number;
@@ -1668,7 +1708,7 @@ export function createChallenge(input: {
   minTier?: string;
 }) {
   const challengeId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO challenges (id, title, description, target_deliveries, bonus_cents, starts_at, ends_at, min_tier, active, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
   ).run(
@@ -1685,20 +1725,20 @@ export function createChallenge(input: {
   return challengeId;
 }
 
-export function listActiveChallenges() {
-  return db
+export async function listActiveChallenges() {
+  return (await db
     .prepare(`SELECT * FROM challenges WHERE active = 1 AND ends_at >= ? ORDER BY ends_at ASC`)
-    .all(now())
+    .all(now()))
     .map(toPlain) as any[];
 }
 
-export function listAllChallenges() {
-  return db.prepare(`SELECT * FROM challenges ORDER BY created_at DESC`).all().map(toPlain) as any[];
+export async function listAllChallenges() {
+  return (await db.prepare(`SELECT * FROM challenges ORDER BY created_at DESC`).all()).map(toPlain) as any[];
 }
 
 /** How many deliveries a courier completed inside a challenge window. */
-export function courierDeliveriesBetween(courierId: string, startsAt: string, endsAt: string) {
-  const r = db
+export async function courierDeliveriesBetween(courierId: string, startsAt: string, endsAt: string) {
+  const r = await db
     .prepare(
       `SELECT COUNT(*) as c FROM orders
        WHERE courier_id = ? AND status = 'DELIVERED' AND delivered_at >= ? AND delivered_at <= ?`
@@ -1707,19 +1747,19 @@ export function courierDeliveriesBetween(courierId: string, startsAt: string, en
   return r?.c ?? 0;
 }
 
-export function hasClaimedChallenge(challengeId: string, courierId: string) {
-  return !!db
+export async function hasClaimedChallenge(challengeId: string, courierId: string) {
+  return !!await db
     .prepare(`SELECT 1 FROM challenge_claims WHERE challenge_id = ? AND courier_id = ?`)
     .get(challengeId, courierId);
 }
 
-export function claimChallenge(challengeId: string, courierId: string, bonusCents: number) {
+export async function claimChallenge(challengeId: string, courierId: string, bonusCents: number) {
   try {
-    db.prepare(
+    await db.prepare(
       `INSERT INTO challenge_claims (id, challenge_id, courier_id, bonus_cents, claimed_at)
        VALUES (?, ?, ?, ?, ?)`
     ).run(id(), challengeId, courierId, bonusCents, now());
-    db.prepare(`UPDATE courier_profiles SET payout_balance_cents = payout_balance_cents + ? WHERE id = ?`).run(
+    await db.prepare(`UPDATE courier_profiles SET payout_balance_cents = payout_balance_cents + ? WHERE id = ?`).run(
       bonusCents,
       courierId
     );
@@ -1729,14 +1769,14 @@ export function claimChallenge(challengeId: string, courierId: string, bonusCent
   }
 }
 
-export function listChallengeClaims(courierId: string) {
-  return db
+export async function listChallengeClaims(courierId: string) {
+  return (await db
     .prepare(
-      `SELECT c.title, cc.bonus_cents as bonusCents, cc.claimed_at as claimedAt
+      `SELECT c.title, cc.bonus_cents as "bonusCents", cc.claimed_at as "claimedAt"
        FROM challenge_claims cc JOIN challenges c ON c.id = cc.challenge_id
        WHERE cc.courier_id = ? ORDER BY cc.claimed_at DESC`
     )
-    .all(courierId)
+    .all(courierId))
     .map(toPlain) as any[];
 }
 
@@ -1745,19 +1785,19 @@ export function listChallengeClaims(courierId: string) {
 // ---------------------------------------------------------------------------
 
 /** Unpaid delivery earnings + bonuses, minus anything already requested. */
-export function courierEarningsSummary(courierId: string) {
-  const delivered = db
+export async function courierEarningsSummary(courierId: string) {
+  const delivered = await db
     .prepare(
       `SELECT COALESCE(SUM(courier_fee_cents),0) as total, COUNT(*) as count
        FROM orders WHERE courier_id = ? AND status = 'DELIVERED'`
     )
     .get(courierId) as any;
 
-  const bonuses = db
+  const bonuses = await db
     .prepare(`SELECT COALESCE(SUM(bonus_cents),0) as total FROM challenge_claims WHERE courier_id = ?`)
     .get(courierId) as any;
 
-  const paidOut = db
+  const paidOut = await db
     .prepare(
       `SELECT COALESCE(SUM(amount_cents),0) as total FROM payout_requests
        WHERE courier_id = ? AND status IN ('requested','approved','paid')`
@@ -1775,37 +1815,37 @@ export function courierEarningsSummary(courierId: string) {
   };
 }
 
-export function createPayoutRequest(input: {
+export async function createPayoutRequest(input: {
   courierId: string;
   amountCents: number;
   feeCents: number;
   method: "instant" | "weekly";
 }) {
   const requestId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO payout_requests (id, courier_id, amount_cents, fee_cents, method, status, created_at)
      VALUES (?, ?, ?, ?, ?, 'requested', ?)`
   ).run(requestId, input.courierId, input.amountCents, input.feeCents, input.method, now());
   return requestId;
 }
 
-export function listPayoutRequests(courierId?: string) {
+export async function listPayoutRequests(courierId?: string) {
   const sql = courierId
-    ? `SELECT p.*, u.email as courierEmail FROM payout_requests p
+    ? `SELECT p.*, u.email as "courierEmail" FROM payout_requests p
        JOIN courier_profiles c ON c.id = p.courier_id JOIN users u ON u.id = c.user_id
        WHERE p.courier_id = ? ORDER BY p.created_at DESC`
-    : `SELECT p.*, u.email as courierEmail FROM payout_requests p
+    : `SELECT p.*, u.email as "courierEmail" FROM payout_requests p
        JOIN courier_profiles c ON c.id = p.courier_id JOIN users u ON u.id = c.user_id
        ORDER BY p.created_at DESC LIMIT 100`;
   const stmt = db.prepare(sql);
-  return (courierId ? stmt.all(courierId) : stmt.all()).map(toPlain) as any[];
+  return (courierId ? await stmt.all(courierId) : await stmt.all()).map(toPlain) as any[];
 }
 
-export function setPayoutStatus(requestId: string, status: string, adminUserId: string, note?: string) {
-  const result = db
+export async function setPayoutStatus(requestId: string, status: string, adminUserId: string, note?: string) {
+  const result = await db
     .prepare(`UPDATE payout_requests SET status = ?, note = ?, processed_at = ? WHERE id = ?`)
     .run(status, note ?? null, now(), requestId);
-  if (result.changes > 0) writeAudit(adminUserId, `payout_${status}`, "payout", requestId, note);
+  if (result.changes > 0) await writeAudit(adminUserId, `payout_${status}`, "payout", requestId, note);
   return result.changes > 0;
 }
 
@@ -1817,32 +1857,32 @@ export function setPayoutStatus(requestId: string, status: string, adminUserId: 
  * Where the work is right now: pending/active orders grouped by pickup
  * area, so couriers can position themselves instead of guessing.
  */
-export function demandHeatmap(hours = 24) {
+export async function demandHeatmap(hours = 24) {
   const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
-  return db
+  return (await db
     .prepare(
-      `SELECT z.id as zoneId, z.name as zoneName, z.city as city,
-              z.surge_multiplier as surgeMultiplier,
-              COUNT(*) as orderCount,
+      `SELECT z.id as "zoneId", z.name as "zoneName", z.city as city,
+              z.surge_multiplier as "surgeMultiplier",
+              COUNT(*) as "orderCount",
               SUM(CASE WHEN o.status = 'PENDING' THEN 1 ELSE 0 END) as waiting,
-              AVG(o.pickup_lat) as avgLat, AVG(o.pickup_lng) as avgLng
+              AVG(o.pickup_lat) as "avgLat", AVG(o.pickup_lng) as "avgLng"
        FROM orders o JOIN zones z ON z.id = o.zone_id
        WHERE o.created_at >= ?
-       GROUP BY z.id ORDER BY waiting DESC, orderCount DESC`
+       GROUP BY z.id ORDER BY waiting DESC, "orderCount" DESC`
     )
-    .all(since)
+    .all(since))
     .map(toPlain) as any[];
 }
 
 /** Busiest hours of day over the last N days — "when should I work?" */
-export function demandByHour(days = 7) {
+export async function demandByHour(days = 7) {
   const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
-  return db
+  return (await db
     .prepare(
-      `SELECT CAST(strftime('%H', created_at) AS INTEGER) as hour, COUNT(*) as orderCount
+      `SELECT CAST(substr(created_at, 12, 2) AS INTEGER) as hour, COUNT(*) as "orderCount"
        FROM orders WHERE created_at >= ? GROUP BY hour ORDER BY hour ASC`
     )
-    .all(since)
+    .all(since))
     .map(toPlain) as any[];
 }
 
@@ -1850,7 +1890,7 @@ export function demandByHour(days = 7) {
 // Support tickets — wired into the admin panel
 // ---------------------------------------------------------------------------
 
-export function createTicket(input: {
+export async function createTicket(input: {
   openedByRole: "merchant" | "courier" | "customer" | "admin";
   openedByUserId?: string | null;
   contactEmail?: string | null;
@@ -1862,7 +1902,7 @@ export function createTicket(input: {
 }) {
   const ticketId = id();
   const reference = `SD-${Date.now().toString(36).toUpperCase().slice(-6)}`;
-  db.prepare(
+  await db.prepare(
     `INSERT INTO support_tickets
       (id, reference, opened_by_role, opened_by_user_id, contact_email, order_id, category, subject, priority, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
@@ -1880,7 +1920,7 @@ export function createTicket(input: {
     now()
   );
 
-  addTicketMessage({
+  await addTicketMessage({
     ticketId,
     senderRole: input.openedByRole,
     senderUserId: input.openedByUserId ?? null,
@@ -1890,14 +1930,14 @@ export function createTicket(input: {
   return { ticketId, reference };
 }
 
-export function addTicketMessage(input: {
+export async function addTicketMessage(input: {
   ticketId: string;
   senderRole: string;
   senderUserId?: string | null;
   body: string;
   internal?: boolean;
 }) {
-  db.prepare(
+  await db.prepare(
     `INSERT INTO ticket_messages (id, ticket_id, sender_role, sender_user_id, body, internal, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(
@@ -1909,54 +1949,54 @@ export function addTicketMessage(input: {
     input.internal ? 1 : 0,
     now()
   );
-  db.prepare(`UPDATE support_tickets SET updated_at = ? WHERE id = ?`).run(now(), input.ticketId);
+  await db.prepare(`UPDATE support_tickets SET updated_at = ? WHERE id = ?`).run(now(), input.ticketId);
 }
 
-export function listTickets(status?: string) {
+export async function listTickets(status?: string) {
   const sql = status
-    ? `SELECT t.*, o.customer_name as orderCustomer FROM support_tickets t
+    ? `SELECT t.*, o.customer_name as "orderCustomer" FROM support_tickets t
        LEFT JOIN orders o ON o.id = t.order_id WHERE t.status = ? ORDER BY t.updated_at DESC LIMIT 100`
-    : `SELECT t.*, o.customer_name as orderCustomer FROM support_tickets t
+    : `SELECT t.*, o.customer_name as "orderCustomer" FROM support_tickets t
        LEFT JOIN orders o ON o.id = t.order_id ORDER BY t.updated_at DESC LIMIT 100`;
   const stmt = db.prepare(sql);
-  return (status ? stmt.all(status) : stmt.all()).map(toPlain) as any[];
+  return (status ? await stmt.all(status) : await stmt.all()).map(toPlain) as any[];
 }
 
-export function getTicket(ticketId: string) {
-  const r = db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(ticketId) as any;
+export async function getTicket(ticketId: string) {
+  const r = await db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(ticketId) as any;
   return r ? toPlain(r) : null;
 }
 
-export function getTicketByReference(reference: string) {
-  const r = db.prepare(`SELECT * FROM support_tickets WHERE reference = ?`).get(reference) as any;
+export async function getTicketByReference(reference: string) {
+  const r = await db.prepare(`SELECT * FROM support_tickets WHERE reference = ?`).get(reference) as any;
   return r ? toPlain(r) : null;
 }
 
-export function listTicketMessages(ticketId: string, includeInternal: boolean) {
+export async function listTicketMessages(ticketId: string, includeInternal: boolean) {
   const sql = includeInternal
     ? `SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC`
     : `SELECT * FROM ticket_messages WHERE ticket_id = ? AND internal = 0 ORDER BY created_at ASC`;
-  return db.prepare(sql).all(ticketId).map(toPlain) as any[];
+  return (await db.prepare(sql).all(ticketId)).map(toPlain) as any[];
 }
 
-export function listTicketsForUser(userId: string) {
-  return db
+export async function listTicketsForUser(userId: string) {
+  return (await db
     .prepare(`SELECT * FROM support_tickets WHERE opened_by_user_id = ? ORDER BY updated_at DESC LIMIT 50`)
-    .all(userId)
+    .all(userId))
     .map(toPlain) as any[];
 }
 
-export function setTicketStatus(ticketId: string, status: string, adminUserId: string) {
-  db.prepare(
+export async function setTicketStatus(ticketId: string, status: string, adminUserId: string) {
+  await db.prepare(
     `UPDATE support_tickets SET status = ?, updated_at = ?, resolved_at = CASE WHEN ? IN ('resolved','closed') THEN ? ELSE resolved_at END WHERE id = ?`
   ).run(status, now(), status, now(), ticketId);
-  writeAudit(adminUserId, `ticket_${status}`, "ticket", ticketId);
+  await writeAudit(adminUserId, `ticket_${status}`, "ticket", ticketId);
 }
 
-export function ticketCounts() {
-  return db
+export async function ticketCounts() {
+  return (await db
     .prepare(`SELECT status, COUNT(*) as count FROM support_tickets GROUP BY status`)
-    .all()
+    .all())
     .map(toPlain) as any[];
 }
 
@@ -1964,43 +2004,43 @@ export function ticketCounts() {
 // Disputes & claims
 // ---------------------------------------------------------------------------
 
-export function createDispute(input: {
+export async function createDispute(input: {
   orderId: string;
   raisedBy: string;
   reason: string;
   orderAmountCents?: number | null;
 }) {
   const disputeId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO disputes (id, order_id, raised_by, reason, status, order_amount_cents, created_at)
      VALUES (?, ?, ?, ?, 'open', ?, ?)`
   ).run(disputeId, input.orderId, input.raisedBy, input.reason, input.orderAmountCents ?? null, now());
-  logEvent(input.orderId, "dispute_opened", { raisedBy: input.raisedBy, reason: input.reason });
+  await logEvent(input.orderId, "dispute_opened", { raisedBy: input.raisedBy, reason: input.reason });
   return disputeId;
 }
 
-export function listDisputes(status?: string) {
+export async function listDisputes(status?: string) {
   const sql = status
-    ? `SELECT d.*, o.customer_name as customerName, o.merchant_id as merchantId, m.business_name as merchantName
+    ? `SELECT d.*, o.customer_name as "customerName", o.merchant_id as "merchantId", m.business_name as "merchantName"
        FROM disputes d JOIN orders o ON o.id = d.order_id
        LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
        WHERE d.status = ? ORDER BY d.created_at DESC LIMIT 100`
-    : `SELECT d.*, o.customer_name as customerName, o.merchant_id as merchantId, m.business_name as merchantName
+    : `SELECT d.*, o.customer_name as "customerName", o.merchant_id as "merchantId", m.business_name as "merchantName"
        FROM disputes d JOIN orders o ON o.id = d.order_id
        LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
        ORDER BY d.created_at DESC LIMIT 100`;
   const stmt = db.prepare(sql);
-  return (status ? stmt.all(status) : stmt.all()).map(toPlain) as any[];
+  return (status ? await stmt.all(status) : await stmt.all()).map(toPlain) as any[];
 }
 
-export function resolveDispute(input: {
+export async function resolveDispute(input: {
   disputeId: string;
   status: "resolved" | "rejected";
   resolution: string;
   resolutionAmountCents?: number | null;
   adminUserId: string;
 }) {
-  const result = db
+  const result = await db
     .prepare(
       `UPDATE disputes SET status = ?, resolution = ?, resolution_amount_cents = ?, resolved_by = ?, resolved_at = ?
        WHERE id = ? AND status = 'open'`
@@ -2014,7 +2054,7 @@ export function resolveDispute(input: {
       input.disputeId
     );
   if (result.changes > 0) {
-    writeAudit(input.adminUserId, `dispute_${input.status}`, "dispute", input.disputeId, input.resolution);
+    await writeAudit(input.adminUserId, `dispute_${input.status}`, "dispute", input.disputeId, input.resolution);
   }
   return result.changes > 0;
 }
@@ -2023,29 +2063,29 @@ export function resolveDispute(input: {
 // Compliance — age verification, temperature, pay transparency
 // ---------------------------------------------------------------------------
 
-export function recordAgeVerification(
+export async function recordAgeVerification(
   orderId: string,
   courierId: string,
   method: "id_checked" | "refused_underage" | "refused_no_id"
 ) {
-  const result = db
+  const result = await db
     .prepare(
-      `UPDATE orders SET age_verified_at = ?, age_verification_method = ? WHERE id = ? AND courier_id = ?`
+      `UPDATE orders SET age_verified_at = ?, age_verification_method = ? WHERE id = ? AND courier_id = ? AND status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT')`
     )
     .run(now(), method, orderId, courierId);
-  if (result.changes > 0) logEvent(orderId, "age_verification", { method });
+  if (result.changes > 0) await logEvent(orderId, "age_verification", { method });
   return result.changes > 0;
 }
 
-export function setCourierEquipment(courierId: string, hasInsulatedBag: boolean) {
-  db.prepare(`UPDATE courier_profiles SET has_insulated_bag = ? WHERE id = ?`).run(
+export async function setCourierEquipment(courierId: string, hasInsulatedBag: boolean) {
+  await db.prepare(`UPDATE courier_profiles SET has_insulated_bag = ? WHERE id = ?`).run(
     hasInsulatedBag ? 1 : 0,
     courierId
   );
 }
 
-export function setUserLocale(userId: string, locale: string) {
-  db.prepare(`UPDATE users SET locale = ? WHERE id = ?`).run(locale, userId);
+export async function setUserLocale(userId: string, locale: string) {
+  await db.prepare(`UPDATE users SET locale = ? WHERE id = ?`).run(locale, userId);
 }
 
 /**
@@ -2054,9 +2094,9 @@ export function setUserLocale(userId: string, locale: string) {
  * engaged time and effective hourly rate for a courier's period, which is
  * what the pay-transparency statement shows them.
  */
-export function courierPayTransparency(courierId: string, days = 14) {
+export async function courierPayTransparency(courierId: string, days = 14) {
   const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT assigned_at, delivered_at, courier_fee_cents
        FROM orders
@@ -2072,7 +2112,7 @@ export function courierPayTransparency(courierId: string, days = 14) {
     earningsCents += r.courier_fee_cents ?? 0;
   }
 
-  const bonuses = db
+  const bonuses = await db
     .prepare(
       `SELECT COALESCE(SUM(bonus_cents),0) as total FROM challenge_claims
        WHERE courier_id = ? AND claimed_at >= ?`
@@ -2113,12 +2153,12 @@ export function courierPayTransparency(courierId: string, days = 14) {
  * How many couriers each zone is likely to need, by hour, based on the
  * last few weeks of demand and average deliveries per courier-hour.
  */
-export function supplyForecast(lookbackDays = 21, deliveriesPerCourierHour = 2.5) {
+export async function supplyForecast(lookbackDays = 21, deliveriesPerCourierHour = 2.5) {
   const since = new Date(Date.now() - lookbackDays * 86400 * 1000).toISOString();
-  const rows = db
+  const rows = await db
     .prepare(
-      `SELECT z.id as zoneId, z.city as city, z.name as zoneName,
-              CAST(strftime('%H', o.created_at) AS INTEGER) as hour,
+      `SELECT z.id as "zoneId", z.city as city, z.name as "zoneName",
+              CAST(substr(o.created_at, 12, 2) AS INTEGER) as hour,
               COUNT(*) as orders
        FROM orders o JOIN zones z ON z.id = o.zone_id
        WHERE o.created_at >= ?
@@ -2145,24 +2185,24 @@ export function supplyForecast(lookbackDays = 21, deliveriesPerCourierHour = 2.5
     .sort((a, b) => b.avgOrdersPerDay - a.avgOrdersPerDay);
 }
 
-export function orderStatusCounts() {
-  return db
+export async function orderStatusCounts() {
+  return (await db
     .prepare(`SELECT status, COUNT(*) as count FROM orders GROUP BY status`)
-    .all()
+    .all())
     .map(toPlain) as { status: OrderStatus; count: number }[];
 }
 
-export function countMerchants() {
-  return (db.prepare(`SELECT COUNT(*) as c FROM merchant_profiles`).get() as any).c as number;
+export async function countMerchants() {
+  return (await db.prepare(`SELECT COUNT(*) as c FROM merchant_profiles`).get() as any).c as number;
 }
 
-export function countCouriers() {
-  return (db.prepare(`SELECT COUNT(*) as c FROM courier_profiles`).get() as any).c as number;
+export async function countCouriers() {
+  return (await db.prepare(`SELECT COUNT(*) as c FROM courier_profiles`).get() as any).c as number;
 }
 
-export function countOnlineCouriers() {
+export async function countOnlineCouriers() {
   return (
-    db.prepare(`SELECT COUNT(*) as c FROM courier_profiles WHERE is_online = 1`).get() as any
+    await db.prepare(`SELECT COUNT(*) as c FROM courier_profiles WHERE is_online = 1`).get() as any
   ).c as number;
 }
 
@@ -2174,15 +2214,15 @@ export function countOnlineCouriers() {
  * waiting on a human, deliveries stuck without a courier, and today's volume
  * to compare against.
  */
-export function opsSummary() {
-  const one = (sql: string, ...params: any[]) =>
-    ((db.prepare(sql).get(...params) as any)?.c ?? 0) as number;
+export async function opsSummary() {
+  const one = async (sql: string, ...params: any[]) =>
+    ((await db.prepare(sql).get(...params) as any)?.c ?? 0) as number;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const since = todayStart.toISOString();
 
-  const revenue = db
+  const revenue = await db
     .prepare(
       `SELECT COALESCE(SUM(price_cents),0) as gross, COALESCE(SUM(platform_fee_cents),0) as net
        FROM orders WHERE status = 'DELIVERED' AND delivered_at >= ?`
@@ -2190,22 +2230,22 @@ export function opsSummary() {
     .get(since) as any;
 
   return {
-    pendingMerchants: one(`SELECT COUNT(*) as c FROM merchant_profiles WHERE kyb_status = 'pending'`),
-    pendingCouriers: one(`SELECT COUNT(*) as c FROM courier_profiles WHERE approval_status = 'pending'`),
-    unassignedOrders: one(
+    pendingMerchants: await one(`SELECT COUNT(*) as c FROM merchant_profiles WHERE kyb_status = 'pending'`),
+    pendingCouriers: await one(`SELECT COUNT(*) as c FROM courier_profiles WHERE approval_status = 'pending'`),
+    unassignedOrders: await one(
       `SELECT COUNT(*) as c FROM orders WHERE status = 'PENDING' AND courier_id IS NULL`
     ),
-    inFlightOrders: one(
+    inFlightOrders: await one(
       `SELECT COUNT(*) as c FROM orders WHERE status IN ('ASSIGNED','PICKED_UP','IN_TRANSIT')`
     ),
-    openDisputes: one(`SELECT COUNT(*) as c FROM disputes WHERE status = 'open'`),
-    openTickets: one(`SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'`),
-    pendingPayouts: one(`SELECT COUNT(*) as c FROM payout_requests WHERE status = 'requested'`),
-    deliveredToday: one(
+    openDisputes: await one(`SELECT COUNT(*) as c FROM disputes WHERE status = 'open'`),
+    openTickets: await one(`SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'`),
+    pendingPayouts: await one(`SELECT COUNT(*) as c FROM payout_requests WHERE status = 'requested'`),
+    deliveredToday: await one(
       `SELECT COUNT(*) as c FROM orders WHERE status = 'DELIVERED' AND delivered_at >= ?`,
       since
     ),
-    failedToday: one(
+    failedToday: await one(
       `SELECT COUNT(*) as c FROM orders WHERE status = 'FAILED' AND created_at >= ?`,
       since
     ),
@@ -2225,10 +2265,10 @@ export function opsSummary() {
 // referrals. Matching is done on contact info, not a foreign key.
 // ---------------------------------------------------------------------------
 
-function generateReferralCode(): string {
+async function generateReferralCode(): Promise<string> {
   for (let i = 0; i < 10; i++) {
     const code = randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
-    const exists = db.prepare(`SELECT 1 FROM loyalty_accounts WHERE referral_code = ?`).get(code);
+    const exists = await db.prepare(`SELECT 1 FROM loyalty_accounts WHERE referral_code = ?`).get(code);
     if (!exists) return code;
   }
   // Astronomically unlikely to be reached, but never loop forever.
@@ -2247,39 +2287,39 @@ function mapLoyaltyAccount(r: any) {
 }
 
 /** Creates the loyalty account row a CUSTOMER user needs from day one — every CUSTOMER gets one at signup. */
-export function createLoyaltyAccount(userId: string, referredByUserId?: string | null) {
-  const code = generateReferralCode();
-  db.prepare(
+export async function createLoyaltyAccount(userId: string, referredByUserId?: string | null) {
+  const code = await generateReferralCode();
+  await db.prepare(
     `INSERT INTO loyalty_accounts (user_id, points, referral_code, referred_by_user_id, created_at)
      VALUES (?, 0, ?, ?, ?)`
   ).run(userId, code, referredByUserId ?? null, now());
   return code;
 }
 
-export function getLoyaltyAccount(userId: string) {
-  return mapLoyaltyAccount(db.prepare(`SELECT * FROM loyalty_accounts WHERE user_id = ?`).get(userId));
+export async function getLoyaltyAccount(userId: string) {
+  return mapLoyaltyAccount(await db.prepare(`SELECT * FROM loyalty_accounts WHERE user_id = ?`).get(userId));
 }
 
-export function getLoyaltyAccountByReferralCode(code: string) {
+export async function getLoyaltyAccountByReferralCode(code: string) {
   return mapLoyaltyAccount(
-    db.prepare(`SELECT * FROM loyalty_accounts WHERE referral_code = ?`).get(code.trim().toUpperCase())
+    await db.prepare(`SELECT * FROM loyalty_accounts WHERE referral_code = ?`).get(code.trim().toUpperCase())
   );
 }
 
 /** Adds (or, with a negative amount, deducts) points and records why. Self-heals a missing account instead of throwing. */
-export function addLoyaltyPoints(userId: string, points: number, reason: string, orderId?: string) {
+export async function addLoyaltyPoints(userId: string, points: number, reason: string, orderId?: string) {
   if (!points) return;
-  if (!getLoyaltyAccount(userId)) createLoyaltyAccount(userId);
-  db.prepare(`UPDATE loyalty_accounts SET points = points + ? WHERE user_id = ?`).run(points, userId);
-  db.prepare(
+  if (!await getLoyaltyAccount(userId)) await createLoyaltyAccount(userId);
+  await db.prepare(`UPDATE loyalty_accounts SET points = points + ? WHERE user_id = ?`).run(points, userId);
+  await db.prepare(
     `INSERT INTO loyalty_transactions (id, user_id, order_id, points, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`
   ).run(id(), userId, orderId ?? null, points, reason, now());
 }
 
-export function listLoyaltyTransactions(userId: string, limit = 50) {
-  return db
+export async function listLoyaltyTransactions(userId: string, limit = 50) {
+  return (await db
     .prepare(`SELECT * FROM loyalty_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`)
-    .all(userId, limit)
+    .all(userId, limit))
     .map((r: any) => ({
       id: r.id,
       userId: r.user_id,
@@ -2290,37 +2330,33 @@ export function listLoyaltyTransactions(userId: string, limit = 50) {
     }));
 }
 
-function findCustomerByContact(email?: string | null, phone?: string | null) {
-  if (email) {
-    const u = mapUser(
-      db.prepare(`SELECT * FROM users WHERE role = 'CUSTOMER' AND email = ?`).get(email.trim().toLowerCase())
-    );
-    if (u) return u;
-  }
-  if (phone) {
-    const u = mapUser(db.prepare(`SELECT * FROM users WHERE role = 'CUSTOMER' AND phone = ?`).get(phone));
-    if (u) return u;
-  }
-  return null;
-}
 
 /** 1 point per dollar spent (min 1), credited automatically the moment an order is marked delivered — only if the guest's email/phone matches a registered CUSTOMER account. */
-export function awardLoyaltyPointsForOrder(order: { id: string; customerEmail?: string | null; customerPhone?: string | null; priceCents: number }) {
-  const customer = findCustomerByContact(order.customerEmail, order.customerPhone);
-  if (!customer) return;
+export async function awardLoyaltyPointsForOrder(order: { id: string; priceCents: number; status?: string }) {
+  // Points go to the customer account(s) linked to this order (see
+  // customer_order_links) — never to whoever registered with a matching
+  // email/phone. Each order is credited at most once.
+  const already = await db
+    .prepare(`SELECT 1 FROM loyalty_transactions WHERE order_id = ? AND reason = 'order_delivered' LIMIT 1`)
+    .get(order.id);
+  if (already) return;
+  const link = await db
+    .prepare(`SELECT user_id FROM customer_order_links WHERE order_id = ? ORDER BY created_at ASC LIMIT 1`)
+    .get(order.id) as { user_id: string } | undefined;
+  if (!link) return;
   const points = Math.max(1, Math.round((order.priceCents ?? 0) / 100));
-  addLoyaltyPoints(customer.id, points, "order_delivered", order.id);
+  await addLoyaltyPoints(link.user_id, points, "order_delivered", order.id);
 }
 
 /** Creates a CUSTOMER user + their loyalty account, and applies a referral bonus on both sides when a valid code is given. */
-export function createCustomerUser(input: {
+export async function createCustomerUser(input: {
   email: string;
   phone?: string;
   fullName?: string;
   passwordHash: string;
   referralCode?: string;
 }) {
-  const userId = createUser({
+  const userId = await createUser({
     email: input.email,
     phone: input.phone,
     fullName: input.fullName,
@@ -2330,14 +2366,14 @@ export function createCustomerUser(input: {
 
   let referredBy: string | null = null;
   if (input.referralCode) {
-    const referrer = getLoyaltyAccountByReferralCode(input.referralCode);
+    const referrer = await getLoyaltyAccountByReferralCode(input.referralCode);
     if (referrer && referrer.userId !== userId) referredBy = referrer.userId;
   }
 
-  createLoyaltyAccount(userId, referredBy);
+  await createLoyaltyAccount(userId, referredBy);
   if (referredBy) {
-    addLoyaltyPoints(userId, 50, "referred_signup_bonus");
-    addLoyaltyPoints(referredBy, 100, "referral_bonus");
+    await addLoyaltyPoints(userId, 50, "referred_signup_bonus");
+    await addLoyaltyPoints(referredBy, 100, "referral_bonus");
   }
 
   return userId;
@@ -2356,51 +2392,58 @@ function mapCustomerAddress(r: any) {
   };
 }
 
-export function createCustomerAddress(userId: string, input: { label?: string; address: string; lat?: number | null; lng?: number | null; isDefault?: boolean }) {
+export async function createCustomerAddress(userId: string, input: { label?: string; address: string; lat?: number | null; lng?: number | null; isDefault?: boolean }) {
   const addrId = id();
-  if (input.isDefault) db.prepare(`UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?`).run(userId);
-  db.prepare(
+  if (input.isDefault) await db.prepare(`UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?`).run(userId);
+  await db.prepare(
     `INSERT INTO customer_addresses (id, user_id, label, address, lat, lng, is_default, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(addrId, userId, input.label?.trim() || "Home", input.address, input.lat ?? null, input.lng ?? null, input.isDefault ? 1 : 0, now());
   return addrId;
 }
 
-export function listCustomerAddresses(userId: string) {
-  return db
+export async function listCustomerAddresses(userId: string) {
+  return (await db
     .prepare(`SELECT * FROM customer_addresses WHERE user_id = ? ORDER BY is_default DESC, created_at DESC`)
-    .all(userId)
+    .all(userId))
     .map(mapCustomerAddress);
 }
 
-export function deleteCustomerAddress(addressId: string, userId: string) {
-  return db.prepare(`DELETE FROM customer_addresses WHERE id = ? AND user_id = ?`).run(addressId, userId).changes > 0;
+export async function deleteCustomerAddress(addressId: string, userId: string) {
+  return (await db.prepare(`DELETE FROM customer_addresses WHERE id = ? AND user_id = ?`).run(addressId, userId)).changes > 0;
 }
 
-export function setDefaultCustomerAddress(addressId: string, userId: string) {
-  db.prepare(`UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?`).run(userId);
+export async function setDefaultCustomerAddress(addressId: string, userId: string) {
+  await db.prepare(`UPDATE customer_addresses SET is_default = 0 WHERE user_id = ?`).run(userId);
   return (
-    db.prepare(`UPDATE customer_addresses SET is_default = 1 WHERE id = ? AND user_id = ?`).run(addressId, userId)
+    (await db.prepare(`UPDATE customer_addresses SET is_default = 1 WHERE id = ? AND user_id = ?`).run(addressId, userId))
       .changes > 0
   );
 }
 
 /** Every past delivery sent to this customer's email or phone — the only link between a guest order and an account. */
-export function listOrdersForCustomer(contact: { email?: string | null; phone?: string | null }, limit = 100) {
-  const email = contact.email?.trim().toLowerCase() ?? "";
-  const phone = contact.phone ?? "";
-  return db
+export async function listOrdersForCustomer(userId: string, limit = 100) {
+  // Only orders this customer has proven are theirs (opened the tracking
+  // link while signed in). Never matched on email/phone alone — those are
+  // unverified at signup, so matching on them let anyone read a stranger's
+  // deliveries just by registering with their email address.
+  return (await db
     .prepare(
       `SELECT o.*, m.business_name as merchant_business_name
-       FROM orders o
+       FROM customer_order_links l
+       JOIN orders o ON o.id = l.order_id
        LEFT JOIN merchant_profiles m ON m.id = o.merchant_id
-       WHERE o.deleted_at IS NULL
-         AND ((? != '' AND LOWER(o.customer_email) = ?) OR (? != '' AND o.customer_phone = ?))
+       WHERE l.user_id = ? AND o.deleted_at IS NULL
        ORDER BY o.created_at DESC
        LIMIT ?`
     )
-    .all(email, email, phone, phone, limit)
-    .map((r: any) => ({ ...mapOrder(r), merchantBusinessName: r.merchant_business_name }));
+    .all(userId, limit))
+    // Public view only (+ the price the customer paid): a customer account is
+    // unverified, so it must never unlock more than the tracking link does.
+    .map((r: any) => ({
+      ...toPublicOrder({ ...mapOrder(r)!, merchantBusinessName: r.merchant_business_name })!,
+      priceCents: r.price_cents as number,
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -2408,60 +2451,60 @@ export function listOrdersForCustomer(contact: { email?: string | null; phone?: 
 // cost breakdown by service type, all scoped to one merchant's own orders.
 // ---------------------------------------------------------------------------
 
-export function merchantAnalytics(merchantId: string, days = 14) {
+export async function merchantAnalytics(merchantId: string, days = 14) {
   const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
 
-  const dailySeries = db
+  const dailySeries = (await db
     .prepare(
-      `SELECT date(created_at) as date,
+      `SELECT substr(created_at, 1, 10) as date,
               COUNT(*) as orders,
-              COALESCE(SUM(price_cents), 0) as revenueCents,
+              COALESCE(SUM(price_cents), 0) as "revenueCents",
               SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as delivered
        FROM orders
        WHERE merchant_id = ? AND deleted_at IS NULL AND created_at >= ?
-       GROUP BY date(created_at)
+       GROUP BY substr(created_at, 1, 10)
        ORDER BY date ASC`
     )
-    .all(merchantId, since)
+    .all(merchantId, since))
     .map(toPlain) as any[];
 
-  const topCustomers = db
+  const topCustomers = (await db
     .prepare(
-      `SELECT customer_name as customerName,
-              COUNT(*) as orderCount,
-              COALESCE(SUM(price_cents), 0) as spentCents
+      `SELECT customer_name as "customerName",
+              COUNT(*) as "orderCount",
+              COALESCE(SUM(price_cents), 0) as "spentCents"
        FROM orders
        WHERE merchant_id = ? AND deleted_at IS NULL
        GROUP BY customer_name
-       ORDER BY spentCents DESC
+       ORDER BY "spentCents" DESC
        LIMIT 8`
     )
-    .all(merchantId)
+    .all(merchantId))
     .map(toPlain) as any[];
 
-  const outcomes = db
+  const outcomes = (await db
     .prepare(
       `SELECT status, COUNT(*) as c FROM orders
        WHERE merchant_id = ? AND deleted_at IS NULL AND status IN ('DELIVERED','FAILED','RETURNED','CANCELLED')
        GROUP BY status`
     )
-    .all(merchantId)
+    .all(merchantId))
     .map(toPlain) as { status: string; c: number }[];
   const delivered = outcomes.find((o) => o.status === "DELIVERED")?.c ?? 0;
   const terminal = outcomes.reduce((sum, o) => sum + o.c, 0);
   const successRate = terminal > 0 ? Math.round((delivered / terminal) * 1000) / 10 : null;
 
-  const serviceBreakdown = db
+  const serviceBreakdown = (await db
     .prepare(
-      `SELECT service_type as serviceType,
-              COUNT(*) as orderCount,
-              COALESCE(SUM(price_cents), 0) as revenueCents
+      `SELECT service_type as "serviceType",
+              COUNT(*) as "orderCount",
+              COALESCE(SUM(price_cents), 0) as "revenueCents"
        FROM orders
        WHERE merchant_id = ? AND deleted_at IS NULL
        GROUP BY service_type
-       ORDER BY revenueCents DESC`
+       ORDER BY "revenueCents" DESC`
     )
-    .all(merchantId)
+    .all(merchantId))
     .map(toPlain) as any[];
 
   return { dailySeries, topCustomers, successRate, delivered, terminal, serviceBreakdown };
@@ -2475,16 +2518,16 @@ export function merchantAnalytics(merchantId: string, days = 14) {
 // can never drift out of sync with the source rows.
 // ---------------------------------------------------------------------------
 
-export function financialSummary(days = 30) {
+export async function financialSummary(days = 30) {
   const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
 
   const totals = toPlain(
-    db
+    await db
       .prepare(
-        `SELECT COUNT(*) as deliveredOrders,
-                COALESCE(SUM(price_cents), 0) as grossRevenueCents,
-                COALESCE(SUM(platform_fee_cents), 0) as platformFeeCents,
-                COALESCE(SUM(courier_fee_cents), 0) as courierFeeCents
+        `SELECT COUNT(*) as "deliveredOrders",
+                COALESCE(SUM(price_cents), 0) as "grossRevenueCents",
+                COALESCE(SUM(platform_fee_cents), 0) as "platformFeeCents",
+                COALESCE(SUM(courier_fee_cents), 0) as "courierFeeCents"
          FROM orders
          WHERE status = 'DELIVERED' AND deleted_at IS NULL AND delivered_at >= ?`
       )
@@ -2492,45 +2535,45 @@ export function financialSummary(days = 30) {
   ) as any;
 
   const refunded = toPlain(
-    db
+    await db
       .prepare(
-        `SELECT COUNT(*) as refundCount, COALESCE(SUM(refund_amount_cents), 0) as refundedCents
+        `SELECT COUNT(*) as "refundCount", COALESCE(SUM(refund_amount_cents), 0) as "refundedCents"
          FROM orders
          WHERE refund_status = 'refunded' AND refunded_at >= ?`
       )
       .get(since)
   ) as any;
 
-  const payouts = db
+  const payouts = (await db
     .prepare(
       `SELECT status,
               COUNT(*) as n,
-              COALESCE(SUM(amount_cents), 0) as amountCents,
-              COALESCE(SUM(fee_cents), 0) as feeCents
+              COALESCE(SUM(amount_cents), 0) as "amountCents",
+              COALESCE(SUM(fee_cents), 0) as "feeCents"
        FROM payout_requests
        WHERE created_at >= ?
        GROUP BY status`
     )
-    .all(since)
+    .all(since))
     .map(toPlain) as { status: string; n: number; amountCents: number; feeCents: number }[];
   const paidOutCents = payouts.filter((p) => p.status === "paid").reduce((s, p) => s + p.amountCents, 0);
   const pendingPayoutCents = payouts
     .filter((p) => p.status === "requested" || p.status === "approved")
     .reduce((s, p) => s + p.amountCents, 0);
 
-  const dailySeries = db
+  const dailySeries = (await db
     .prepare(
-      `SELECT date(delivered_at) as date,
+      `SELECT substr(delivered_at, 1, 10) as date,
               COUNT(*) as orders,
-              COALESCE(SUM(price_cents), 0) as grossCents,
-              COALESCE(SUM(platform_fee_cents), 0) as platformCents,
-              COALESCE(SUM(courier_fee_cents), 0) as courierCents
+              COALESCE(SUM(price_cents), 0) as "grossCents",
+              COALESCE(SUM(platform_fee_cents), 0) as "platformCents",
+              COALESCE(SUM(courier_fee_cents), 0) as "courierCents"
        FROM orders
        WHERE status = 'DELIVERED' AND deleted_at IS NULL AND delivered_at >= ?
-       GROUP BY date(delivered_at)
+       GROUP BY substr(delivered_at, 1, 10)
        ORDER BY date ASC`
     )
-    .all(since)
+    .all(since))
     .map(toPlain) as any[];
 
   return {
@@ -2555,34 +2598,34 @@ export function financialSummary(days = 30) {
 // the board ranks on, so it can never disagree with a courier's own stats.
 // ---------------------------------------------------------------------------
 
-export function weeklyLeaderboard(limit = 20) {
+export async function weeklyLeaderboard(limit = 20) {
   const since = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
-  return db
+  return (await db
     .prepare(
-      `SELECT c.id as courierId,
+      `SELECT c.id as "courierId",
               COALESCE(c.full_name, u.email) as name,
               c.tier as tier,
               c.rating as rating,
               COUNT(o.id) as deliveries,
-              COALESCE(SUM(o.courier_fee_cents), 0) as earnedCents
+              COALESCE(SUM(o.courier_fee_cents), 0) as "earnedCents"
        FROM courier_profiles c
        JOIN users u ON u.id = c.user_id
        LEFT JOIN orders o ON o.courier_id = c.id AND o.status = 'DELIVERED' AND o.delivered_at >= ?
        WHERE c.approval_status = 'approved' AND c.deleted_at IS NULL
-       GROUP BY c.id
-       HAVING deliveries > 0
-       ORDER BY deliveries DESC, earnedCents DESC
+       GROUP BY c.id, u.id
+       HAVING COUNT(o.id) > 0
+       ORDER BY deliveries DESC, "earnedCents" DESC
        LIMIT ?`
     )
-    .all(since, limit)
+    .all(since, limit))
     .map(toPlain) as { courierId: string; name: string; tier: string; rating: number; deliveries: number; earnedCents: number }[];
 }
 
 /** Where a specific courier sits on the same ranking, even if they fall
  * outside the top `limit` shown on the board — so "your rank" is always
  * answerable without pulling every courier's stats client-side. */
-export function courierWeeklyRank(courierId: string) {
-  const board = weeklyLeaderboard(10_000);
+export async function courierWeeklyRank(courierId: string) {
+  const board = await weeklyLeaderboard(10_000);
   const index = board.findIndex((r) => r.courierId === courierId);
   if (index === -1) return { rank: null, deliveries: 0, earnedCents: 0 };
   return { rank: index + 1, deliveries: board[index].deliveries, earnedCents: board[index].earnedCents, total: board.length };
@@ -2597,9 +2640,9 @@ export function courierWeeklyRank(courierId: string) {
 const IN_FLIGHT_STATUSES = ["PENDING", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"];
 
 /** Orders currently past their promised window and not yet flagged. */
-export function findNewSlaBreaches() {
+export async function findNewSlaBreaches() {
   const placeholders = IN_FLIGHT_STATUSES.map(() => "?").join(",");
-  return db
+  return (await db
     .prepare(
       `SELECT o.*, m.business_name as merchant_business_name
        FROM orders o
@@ -2610,19 +2653,19 @@ export function findNewSlaBreaches() {
          AND o.window_end < ?
          AND o.sla_breach_alerted_at IS NULL`
     )
-    .all(...IN_FLIGHT_STATUSES, now())
+    .all(...IN_FLIGHT_STATUSES, now()))
     .map(mapOrder);
 }
 
-export function markSlaBreachAlerted(orderId: string) {
-  db.prepare(`UPDATE orders SET sla_breach_alerted_at = ? WHERE id = ?`).run(now(), orderId);
+export async function markSlaBreachAlerted(orderId: string) {
+  await db.prepare(`UPDATE orders SET sla_breach_alerted_at = ? WHERE id = ?`).run(now(), orderId);
 }
 
 /** Everything currently late, for the admin ops view — includes orders
  * already flagged, not just the freshly-detected ones above. */
-export function listCurrentSlaBreaches(limit = 100) {
+export async function listCurrentSlaBreaches(limit = 100) {
   const placeholders = IN_FLIGHT_STATUSES.map(() => "?").join(",");
-  return db
+  return (await db
     .prepare(
       `SELECT o.*, m.business_name as merchant_business_name, u.email as courier_email
        FROM orders o
@@ -2636,7 +2679,7 @@ export function listCurrentSlaBreaches(limit = 100) {
        ORDER BY o.window_end ASC
        LIMIT ?`
     )
-    .all(...IN_FLIGHT_STATUSES, now(), limit)
+    .all(...IN_FLIGHT_STATUSES, now(), limit))
     .map(mapOrder);
 }
 
@@ -2651,15 +2694,15 @@ const SURGE_WAITING_THRESHOLD = Number(process.env.SURGE_WAITING_THRESHOLD ?? 3)
 const SURGE_BONUS_CENTS = Number(process.env.SURGE_BONUS_CENTS ?? 500);
 const SURGE_ALERT_TTL_MINUTES = Number(process.env.SURGE_ALERT_TTL_MINUTES ?? 30);
 
-export function listActiveSurgeAlerts() {
-  return db
+export async function listActiveSurgeAlerts() {
+  return (await db
     .prepare(
       `SELECT sa.*, z.name as zone_name, z.city as city
        FROM surge_alerts sa JOIN zones z ON z.id = sa.zone_id
        WHERE sa.expires_at > ?
        ORDER BY sa.waiting_count DESC`
     )
-    .all(now())
+    .all(now()))
     .map((r: any) => ({
       id: r.id,
       zoneId: r.zone_id,
@@ -2673,43 +2716,43 @@ export function listActiveSurgeAlerts() {
 }
 
 /** Called from the dispatch tick with each zone's current waiting count. Returns the new alert if one was just created, otherwise null. */
-export function maybeCreateSurgeAlert(zoneId: string, waitingCount: number) {
+export async function maybeCreateSurgeAlert(zoneId: string, waitingCount: number) {
   if (waitingCount < SURGE_WAITING_THRESHOLD) return null;
 
-  const existing = db
+  const existing = await db
     .prepare(`SELECT 1 FROM surge_alerts WHERE zone_id = ? AND expires_at > ?`)
     .get(zoneId, now());
   if (existing) return null;
 
   const alertId = id();
   const expiresAt = new Date(Date.now() + SURGE_ALERT_TTL_MINUTES * 60_000).toISOString();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO surge_alerts (id, zone_id, waiting_count, bonus_cents, expires_at, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(alertId, zoneId, waitingCount, SURGE_BONUS_CENTS, expiresAt, now());
 
-  const zone = getZoneById(zoneId);
+  const zone = await getZoneById(zoneId);
   return { id: alertId, zoneId, zoneName: zone?.name, city: zone?.city, waitingCount, bonusCents: SURGE_BONUS_CENTS, expiresAt };
 }
 
 /** Every currently-online courier's userId — who a surge push should reach. */
-export function onlineCourierUserIds(): string[] {
-  return db
+export async function onlineCourierUserIds(): Promise<string[]> {
+  return (await db
     .prepare(`SELECT user_id FROM courier_profiles WHERE is_online = 1 AND deleted_at IS NULL`)
-    .all()
+    .all())
     .map((r: any) => r.user_id);
 }
 
 /** Zones with at least one order still waiting for a courier right now — the input maybeCreateSurgeAlert acts on. */
-export function pendingCountsByZone() {
-  return db
+export async function pendingCountsByZone() {
+  return (await db
     .prepare(
-      `SELECT zone_id as zoneId, COUNT(*) as waitingCount
+      `SELECT zone_id as "zoneId", COUNT(*) as "waitingCount"
        FROM orders
        WHERE status = 'PENDING' AND deleted_at IS NULL AND zone_id IS NOT NULL
        GROUP BY zone_id`
     )
-    .all()
+    .all())
     .map(toPlain) as { zoneId: string; waitingCount: number }[];
 }
 
@@ -2718,18 +2761,18 @@ export function pendingCountsByZone() {
 // unauthenticated "share my live location" links.
 // ---------------------------------------------------------------------------
 
-export function setCourierEmergencyContact(courierId: string, name: string, phone: string) {
-  db.prepare(`UPDATE courier_profiles SET emergency_contact_name = ?, emergency_contact_phone = ? WHERE id = ?`).run(
+export async function setCourierEmergencyContact(courierId: string, name: string, phone: string) {
+  await db.prepare(`UPDATE courier_profiles SET emergency_contact_name = ?, emergency_contact_phone = ? WHERE id = ?`).run(
     name,
     phone,
     courierId
   );
 }
 
-export function adminUserIds(): string[] {
-  return db
+export async function adminUserIds(): Promise<string[]> {
+  return (await db
     .prepare(`SELECT id FROM users WHERE role = 'ADMIN' AND status = 'active'`)
-    .all()
+    .all())
     .map((r: any) => r.id);
 }
 
@@ -2752,17 +2795,17 @@ function mapSafetyIncident(r: any) {
 }
 
 /** Records an SOS press. Returns the incident so the caller can push-notify with its id/location. */
-export function createSafetyIncident(input: { courierId: string; orderId?: string | null; lat?: number | null; lng?: number | null; note?: string | null }) {
+export async function createSafetyIncident(input: { courierId: string; orderId?: string | null; lat?: number | null; lng?: number | null; note?: string | null }) {
   const incidentId = id();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO safety_incidents (id, courier_id, order_id, lat, lng, note, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`
   ).run(incidentId, input.courierId, input.orderId ?? null, input.lat ?? null, input.lng ?? null, input.note ?? null, now());
   return incidentId;
 }
 
-export function listOpenSafetyIncidents() {
-  return db
+export async function listOpenSafetyIncidents() {
+  return (await db
     .prepare(
       `SELECT si.*, cp.full_name as courier_full_name, cp.phone as courier_phone, u.email as courier_email
        FROM safety_incidents si
@@ -2771,15 +2814,15 @@ export function listOpenSafetyIncidents() {
        WHERE si.status != 'resolved'
        ORDER BY si.created_at DESC`
     )
-    .all()
+    .all())
     .map(mapSafetyIncident);
 }
 
-export function resolveSafetyIncident(incidentId: string, adminUserId: string) {
+export async function resolveSafetyIncident(incidentId: string, adminUserId: string) {
   return (
-    db
+    (await db
       .prepare(`UPDATE safety_incidents SET status = 'resolved', resolved_at = ?, resolved_by = ? WHERE id = ?`)
-      .run(now(), adminUserId, incidentId).changes > 0
+      .run(now(), adminUserId, incidentId)).changes > 0
   );
 }
 
@@ -2788,11 +2831,11 @@ function generateShareToken(): string {
 }
 
 /** A courier-initiated link, valid for `minutes`, that shows their live position to whoever holds it — no login required. */
-export function createLocationShare(courierId: string, minutes = 60) {
+export async function createLocationShare(courierId: string, minutes = 60) {
   const shareId = id();
   const token = generateShareToken();
   const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
-  db.prepare(`INSERT INTO location_shares (id, token, courier_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`).run(
+  await db.prepare(`INSERT INTO location_shares (id, token, courier_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)`).run(
     shareId,
     token,
     courierId,
@@ -2802,8 +2845,8 @@ export function createLocationShare(courierId: string, minutes = 60) {
   return { token, expiresAt };
 }
 
-export function getActiveLocationShare(token: string) {
-  const r = db.prepare(`SELECT * FROM location_shares WHERE token = ? AND expires_at > ?`).get(token, now()) as any;
+export async function getActiveLocationShare(token: string) {
+  const r = await db.prepare(`SELECT * FROM location_shares WHERE token = ? AND expires_at > ?`).get(token, now()) as any;
   if (!r) return null;
   return { id: r.id, courierId: r.courier_id, expiresAt: r.expires_at, createdAt: r.created_at };
 }
@@ -2817,18 +2860,210 @@ export function getActiveLocationShare(token: string) {
 // ---------------------------------------------------------------------------
 
 /** Marks this role as having read the thread up to now — call this whenever they fetch the thread. */
-export function markMessagesRead(orderId: string, role: string) {
-  db.prepare(
+export async function markMessagesRead(orderId: string, role: string) {
+  await db.prepare(
     `INSERT INTO message_read_state (order_id, role, last_read_at) VALUES (?, ?, ?)
      ON CONFLICT(order_id, role) DO UPDATE SET last_read_at = excluded.last_read_at`
   ).run(orderId, role, now());
 }
 
 /** Every role's last-read timestamp for this order's thread, as a lookup map. */
-export function getReadState(orderId: string): Record<string, string> {
-  const rows = db.prepare(`SELECT role, last_read_at FROM message_read_state WHERE order_id = ?`).all(orderId) as {
+export async function getReadState(orderId: string): Promise<Record<string, string>> {
+  const rows = await db.prepare(`SELECT role, last_read_at FROM message_read_state WHERE order_id = ?`).all(orderId) as {
     role: string;
     last_read_at: string;
   }[];
   return Object.fromEntries(rows.map((r) => [r.role, r.last_read_at]));
+}
+
+// ---------------------------------------------------------------------------
+// Public (no-login) tracking view of an order.
+//
+// The tracking link is forwarded around in SMS/email, so anyone holding it
+// gets exactly what the tracking page needs to render — and nothing else:
+// no customer phone/email, no courier email or ids, no fees or margins, no
+// internal notes (cancel reasons, refund notes, failure reasons).
+// ---------------------------------------------------------------------------
+
+export function toPublicOrder(order: ReturnType<typeof mapOrder>) {
+  if (!order) return null;
+  const firstName = (order.customerName ?? "").trim().split(/\s+/)[0] ?? "";
+  return {
+    id: order.id,
+    status: order.status,
+    merchantBusinessName: order.merchantBusinessName ?? null,
+    customerName: firstName,
+    pickupAddress: order.pickupAddress,
+    pickupLat: order.pickupLat,
+    pickupLng: order.pickupLng,
+    dropoffAddress: order.dropoffAddress,
+    dropoffLat: order.dropoffLat,
+    dropoffLng: order.dropoffLng,
+    courierAssigned: !!order.courierId,
+    courierVehicleType: order.courierVehicleType ?? null,
+    proofOfDeliveryUrl: order.status === "DELIVERED" ? order.proofOfDeliveryUrl ?? null : null,
+    customerRating: order.customerRating ?? null,
+    windowStart: order.windowStart,
+    windowEnd: order.windowEnd,
+    etaMinutes: order.etaMinutes,
+    createdAt: order.createdAt,
+    deliveredAt: order.deliveredAt,
+  };
+}
+
+/** Can this signed-in user see the full (non-public) order record? */
+export async function canViewFullOrder(user: { id: string; role: Role } | null, order: ReturnType<typeof mapOrder>) {
+  if (!user || !order) return false;
+  if (user.role === "ADMIN") return true;
+  if (user.role === "MERCHANT") return (await getMerchantProfileByUserId(user.id))?.id === order.merchantId;
+  if (user.role === "COURIER") return !!order.courierId && (await getCourierProfileByUserId(user.id))?.id === order.courierId;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Customer <-> order links (see customer_order_links in db.ts).
+// ---------------------------------------------------------------------------
+
+export async function linkOrderToCustomer(userId: string, orderId: string) {
+  const result = await db
+    .prepare(`INSERT INTO customer_order_links (user_id, order_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`)
+    .run(userId, orderId, now());
+  // Linking an already-delivered order still earns its points (once).
+  if (Number(result.changes) > 0) {
+    const order = await getOrderById(orderId);
+    if (order?.status === "DELIVERED") await awardLoyaltyPointsForOrder(order);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account erasure (privacy). Replaces personal data with nothing; keeps the
+// non-personal skeleton (ids, order totals, statuses) so delivery history,
+// payouts and financial records stay consistent for accounting.
+// ---------------------------------------------------------------------------
+
+/** A syntactically valid bcrypt hash whose password nobody knows. */
+function unusablePasswordHash() {
+  const alphabet = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = randomBytes(53);
+  let out = "";
+  for (const b of bytes) out += alphabet[b % alphabet.length];
+  return `$2a$10$${out}`;
+}
+
+/**
+ * Permanently anonymises one user account and everything personal hanging
+ * off it. Returns the list of stored document file names that the caller
+ * must delete from disk (repo.ts doesn't touch the filesystem).
+ */
+export async function eraseUserAccount(userId: string, actorUserId: string | null, reason: string): Promise<string[]> {
+  const user = await findUserById(userId);
+  if (!user || user.status === "erased") return [];
+  const ts = now();
+
+  await db.prepare(
+    `UPDATE users SET email = ?, phone = NULL, full_name = NULL, password_hash = ?, status = 'erased',
+            erased_at = ?, updated_at = ? WHERE id = ?`
+  ).run(`erased-${userId}@erased.invalid`, unusablePasswordHash(), ts, ts, userId);
+
+  await db.prepare(`DELETE FROM customer_addresses WHERE user_id = ?`).run(userId);
+  await db.prepare(`DELETE FROM customer_order_links WHERE user_id = ?`).run(userId);
+  await db.prepare(`DELETE FROM push_subscriptions WHERE subject_type = 'user' AND subject_id = ?`).run(userId);
+  await db.prepare(`UPDATE support_tickets SET contact_email = NULL WHERE opened_by_user_id = ?`).run(userId);
+
+  const files: string[] = [];
+
+  const courier = await db.prepare(`SELECT id FROM courier_profiles WHERE user_id = ?`).get(userId) as { id: string } | undefined;
+  if (courier) {
+    await db.prepare(
+      `UPDATE courier_profiles SET full_name = NULL, phone = NULL, license_number = NULL, license_doc_url = NULL,
+              insurance_doc_url = NULL, insurance_provider = NULL, insurance_policy_number = NULL,
+              vehicle_make_model = NULL, vehicle_plate = NULL, emergency_contact_name = NULL,
+              emergency_contact_phone = NULL, last_lat = NULL, last_lng = NULL, last_location_at = NULL,
+              payout_account_id = NULL, is_online = 0,
+              deleted_at = COALESCE(deleted_at, ?)
+        WHERE id = ?`
+    ).run(ts, courier.id);
+    await db.prepare(`DELETE FROM courier_location_pings WHERE courier_id = ?`).run(courier.id);
+    await db.prepare(`DELETE FROM location_shares WHERE courier_id = ?`).run(courier.id);
+    await db.prepare(`UPDATE safety_incidents SET lat = NULL, lng = NULL, note = NULL WHERE courier_id = ?`).run(courier.id);
+    files.push(...await collectAndForgetDocuments("courier", courier.id));
+  }
+
+  const merchant = await db.prepare(`SELECT id FROM merchant_profiles WHERE user_id = ?`).get(userId) as { id: string } | undefined;
+  if (merchant) {
+    await db.prepare(
+      `UPDATE merchant_profiles SET contact_name = NULL, business_phone = NULL, business_address = NULL,
+              payout_method = NULL, deleted_at = COALESCE(deleted_at, ?)
+        WHERE id = ?`
+    ).run(ts, merchant.id);
+    await db.prepare(`UPDATE api_keys SET revoked_at = COALESCE(revoked_at, ?), webhook_url = NULL WHERE merchant_id = ?`).run(ts, merchant.id);
+    files.push(...await collectAndForgetDocuments("merchant", merchant.id));
+  }
+
+  await writeAudit(actorUserId, "account_erased", "user", userId, reason);
+  return files;
+}
+
+/** Marks an owner's documents as purged and returns their file names for deletion. */
+export async function collectAndForgetDocuments(ownerType: "courier" | "merchant", ownerId: string): Promise<string[]> {
+  const rows = await db
+    .prepare(`SELECT id, url FROM documents WHERE owner_type = ? AND owner_id = ? AND file_purged_at IS NULL`)
+    .all(ownerType, ownerId) as { id: string; url: string }[];
+  await db.prepare(
+    `UPDATE documents SET url = '', original_name = NULL, file_purged_at = ? WHERE owner_type = ? AND owner_id = ? AND file_purged_at IS NULL`
+  ).run(now(), ownerType, ownerId);
+  return rows.map((r) => r.url).filter(Boolean);
+}
+
+const ERASE_GRACE_DAYS = (() => {
+  const v = Number(process.env.ERASE_DELETED_AFTER_DAYS);
+  return Number.isFinite(v) && v > 0 ? v : 30;
+})();
+
+/** Stamps when a deleted account's personal data becomes due for erasure. */
+async function scheduleErasure(userIdSql: string, param: string) {
+  const row = await db.prepare(userIdSql).get(param) as { user_id: string } | undefined;
+  if (!row) return;
+  const due = new Date(Date.now() + ERASE_GRACE_DAYS * 86400e3).toISOString();
+  await db.prepare(`UPDATE users SET erase_after = ? WHERE id = ? AND status != 'erased'`).run(due, row.user_id);
+}
+
+/**
+ * Undoes scheduleErasure when an admin restores a record. Returns false if
+ * the account was already erased (nothing left to restore). A user who
+ * closed their own account is reactivated.
+ */
+async function cancelErasure(userIdSql: string, param: string): Promise<boolean> {
+  const row = await db.prepare(userIdSql).get(param) as { user_id: string } | undefined;
+  if (!row) return true;
+  const u = await findUserById(row.user_id);
+  if (u?.status === "erased") return false;
+  const closedBySelf = await db
+    .prepare(`SELECT 1 FROM audit_log WHERE action = 'account_closed_by_user' AND target_id = ? LIMIT 1`)
+    .get(row.user_id);
+  await db.prepare(
+    `UPDATE users SET erase_after = NULL, status = CASE WHEN ? THEN 'active' ELSE status END WHERE id = ?`
+  ).run(closedBySelf ? 1 : 0, row.user_id);
+  return true;
+}
+
+export async function setUserPassword(userId: string, passwordHash: string) {
+  const ts = now();
+  await db.prepare(`UPDATE users SET password_hash = ?, password_changed_at = ?, updated_at = ? WHERE id = ?`).run(passwordHash, ts, ts, userId);
+  await writeAudit(userId, "password_changed", "user", userId);
+}
+
+/**
+ * Self-service account closure for couriers/merchants: the profile is
+ * soft-deleted and the login suspended right away; personal data is erased
+ * automatically after the grace period (lib/retention.ts) so pending
+ * payouts / disputes can still be settled.
+ */
+export async function closeAccountWithGrace(userId: string) {
+  const ts = now();
+  const due = new Date(Date.now() + ERASE_GRACE_DAYS * 86400e3).toISOString();
+  await db.prepare(`UPDATE users SET status = 'suspended', erase_after = ?, updated_at = ? WHERE id = ?`).run(due, ts, userId);
+  await db.prepare(`UPDATE courier_profiles SET deleted_at = COALESCE(deleted_at, ?), deleted_by = COALESCE(deleted_by, ?), is_online = 0 WHERE user_id = ?`).run(ts, userId, userId);
+  await db.prepare(`UPDATE merchant_profiles SET deleted_at = COALESCE(deleted_at, ?), deleted_by = COALESCE(deleted_by, ?) WHERE user_id = ?`).run(ts, userId, userId);
+  await writeAudit(userId, "account_closed_by_user", "user", userId);
 }

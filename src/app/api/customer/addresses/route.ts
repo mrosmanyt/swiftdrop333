@@ -14,7 +14,7 @@ const schema = z.object({
 export async function GET() {
   const auth = await requireRole("CUSTOMER");
   if (auth instanceof NextResponse) return auth;
-  return NextResponse.json({ addresses: listCustomerAddresses(auth.id) });
+  return NextResponse.json({ addresses: await listCustomerAddresses(auth.id) });
 }
 
 export async function POST(req: NextRequest) {
@@ -24,6 +24,6 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const addressId = createCustomerAddress(auth.id, parsed.data);
+  const addressId = await createCustomerAddress(auth.id, parsed.data);
   return NextResponse.json({ ok: true, addressId }, { status: 201 });
 }

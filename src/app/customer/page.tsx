@@ -10,9 +10,9 @@ export default async function CustomerDashboard() {
   const session = await getSessionUser();
   if (!session || session.role !== "CUSTOMER") redirect("/login");
 
-  const user = findUserById(session.id);
-  const orders = listOrdersForCustomer({ email: user?.email ?? session.email, phone: user?.phone }, 200);
-  const loyalty = getLoyaltyAccount(session.id);
+  const user = await findUserById(session.id);
+  const orders = await listOrdersForCustomer(session.id, 200);
+  const loyalty = await getLoyaltyAccount(session.id);
 
   const activeCount = orders.filter((o: any) => ACTIVE.includes(o.status)).length;
   const deliveredCount = orders.filter((o: any) => o.status === "DELIVERED").length;
@@ -77,7 +77,7 @@ export default async function CustomerDashboard() {
         ) : (
           <EmptyState
             title="No deliveries yet"
-            hint="Once a business sends you a delivery using this email or phone number, it'll show up here automatically."
+            hint="Open the tracking link from your delivery text or email while signed in, and that delivery is saved here."
           />
         )}
       </Card>

@@ -1,3 +1,4 @@
+import { assertPublicWebhookUrl } from "@/lib/netGuard";
 import {
   createOrder,
   getOrderById,
@@ -6,7 +7,7 @@ import {
   webhookUrlsForMerchant,
 } from "@/lib/repo";
 import { computeOrderPrice, ServiceType } from "@/lib/pricing";
-import { routeBetween } from "@/lib/geo";
+import { haversineKm, routeBetween, searchAddress } from "@/lib/geo";
 import { runDispatchTick } from "@/lib/dispatch";
 import { notifyOrderCreated } from "@/lib/notify";
 
@@ -36,9 +37,55 @@ export interface CreateOrderRequest {
   source?: "portal" | "csv" | "api" | "recurring";
 }
 
+/**
+ * The price is driven by distance, so coordinates can't simply be taken on
+ * trust from the client (a merchant could send pickup == dropoff and pay the
+ * minimum for a cross-city run). The server geocodes each address itself;
+ * if its result disagrees with the submitted point by more than 2 km — or
+ * no point was submitted — the server's coordinates win. If geocoding is
+ * unavailable, the submitted point is used as before.
+ */
+let geocoderDownUntil = 0; // circuit breaker so a dead geocoder can't stall bulk imports
+const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
+
+async function verifiedPoint(address: string, lat?: number | null, lng?: number | null, bias?: { lat: number; lng: number }) {
+  if (Date.now() < geocoderDownUntil) return { lat: lat ?? null, lng: lng ?? null };
+  // Bias the lookup toward the submitted point: for an ambiguous address
+  // ("123 Main St") the candidate near the merchant's own pin wins, so a
+  // genuine pin is never moved — only a point that is nowhere near any
+  // match for the typed address gets corrected.
+  const near = lat != null && lng != null ? { lat, lng } : bias;
+  const key = `${address.trim().toLowerCase()}|${near ? `${near.lat.toFixed(2)},${near.lng.toFixed(2)}` : ""}`;
+  let top = geocodeCache.get(key);
+  if (top === undefined) {
+    const { suggestions, degraded } = await searchAddress(address, near);
+    if (degraded) {
+      geocoderDownUntil = Date.now() + 60_000;
+      return { lat: lat ?? null, lng: lng ?? null };
+    }
+    top = suggestions[0] ? { lat: suggestions[0].lat, lng: suggestions[0].lng } : null;
+    if (geocodeCache.size > 2000) geocodeCache.clear();
+    geocodeCache.set(key, top);
+  }
+  const suggestions = top ? [top] : [];
+  const g = suggestions[0];
+  if (!g) return { lat: lat ?? null, lng: lng ?? null };
+  if (lat == null || lng == null) return { lat: g.lat, lng: g.lng };
+  return haversineKm(lat, lng, g.lat, g.lng) > 2 ? { lat: g.lat, lng: g.lng } : { lat, lng };
+}
+
 export async function createAndDispatchOrder(input: CreateOrderRequest) {
-  const zone = getZoneById(input.zoneId);
+  const zone = await getZoneById(input.zoneId);
   if (!zone || !zone.isActive) throw new Error("Unknown or inactive zone");
+
+  const pickup = await verifiedPoint(input.pickupAddress, input.pickupLat, input.pickupLng);
+  const dropoff = await verifiedPoint(
+    input.dropoffAddress,
+    input.dropoffLat,
+    input.dropoffLng,
+    pickup.lat != null && pickup.lng != null ? { lat: pickup.lat, lng: pickup.lng } : undefined
+  );
+  input = { ...input, pickupLat: pickup.lat, pickupLng: pickup.lng, dropoffLat: dropoff.lat, dropoffLng: dropoff.lng };
 
   let distanceKm = 3;
   let distanceSource = "flat-estimate";
@@ -62,7 +109,7 @@ export async function createAndDispatchOrder(input: CreateOrderRequest) {
     surgeMultiplier: zone.surgeMultiplier,
   });
 
-  const orderId = createOrder({
+  const orderId = await createOrder({
     ...input,
     priceCents,
     courierFeeCents,
@@ -74,18 +121,18 @@ export async function createAndDispatchOrder(input: CreateOrderRequest) {
 
   // Record surge + source on the order for reporting.
   const { db } = await import("@/lib/db");
-  db.prepare(`UPDATE orders SET surge_multiplier = ?, source = ? WHERE id = ?`).run(
+  await db.prepare(`UPDATE orders SET surge_multiplier = ?, source = ? WHERE id = ?`).run(
     zone.surgeMultiplier ?? 1,
     input.source ?? "portal",
     orderId
   );
 
-  const order = getOrderById(orderId);
+  const order = await getOrderById(orderId);
   if (order) {
     await notifyOrderCreated(order as any);
     await fireWebhooks(input.merchantId, "order.created", order);
   }
-  runDispatchTick();
+  await runDispatchTick();
 
   return { orderId, priceCents, courierFeeCents, distanceKm, surgeMultiplier: zone.surgeMultiplier };
 }
@@ -96,7 +143,7 @@ export async function createAndDispatchOrder(input: CreateOrderRequest) {
  * not break their delivery.
  */
 export async function fireWebhooks(merchantId: string, event: string, order: any) {
-  const urls = webhookUrlsForMerchant(merchantId);
+  const urls = await webhookUrlsForMerchant(merchantId);
   if (!urls.length) return;
 
   const payload = JSON.stringify({
@@ -115,6 +162,7 @@ export async function fireWebhooks(merchantId: string, event: string, order: any
   await Promise.all(
     urls.map(async (url) => {
       try {
+        await assertPublicWebhookUrl(url);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(url, {
@@ -122,9 +170,11 @@ export async function fireWebhooks(merchantId: string, event: string, order: any
           headers: { "Content-Type": "application/json", "X-SwiftDrop-Event": event },
           body: payload,
           signal: controller.signal,
+          // Never follow redirects — a public URL could 302 to an internal one.
+          redirect: "manual",
         }).finally(() => clearTimeout(timer));
 
-        recordWebhookDelivery({
+        await recordWebhookDelivery({
           merchantId,
           orderId: order.id,
           event,
@@ -133,7 +183,7 @@ export async function fireWebhooks(merchantId: string, event: string, order: any
           responseCode: res.status,
         });
       } catch (e: any) {
-        recordWebhookDelivery({
+        await recordWebhookDelivery({
           merchantId,
           orderId: order.id,
           event,

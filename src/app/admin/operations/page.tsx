@@ -9,10 +9,10 @@ export default async function AdminOperationsPage() {
 
   return (
     <OperationsPanel
-      zones={listAllZones() as any}
-      challenges={listAllChallenges()}
-      payouts={listPayoutRequests()}
-      openBatches={listOpenBatches().length}
+      zones={await listAllZones() as any}
+      challenges={await listAllChallenges()}
+      payouts={await listPayoutRequests()}
+      openBatches={(await listOpenBatches()).length}
     />
   );
 }

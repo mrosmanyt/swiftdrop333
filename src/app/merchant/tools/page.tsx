@@ -9,12 +9,12 @@ export default async function MerchantToolsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "MERCHANT") redirect("/login");
 
-  const merchant = getMerchantProfileByUserId(user.id);
+  const merchant = await getMerchantProfileByUserId(user.id);
   if (!merchant) return <p>No merchant profile found.</p>;
 
-  const zones = listActiveZones();
-  const keys = listApiKeys(merchant.id);
-  const webhooks = listWebhookDeliveries(merchant.id, 10);
+  const zones = await listActiveZones();
+  const keys = await listApiKeys(merchant.id);
+  const webhooks = await listWebhookDeliveries(merchant.id, 10);
 
   return (
     <div className="space-y-10">

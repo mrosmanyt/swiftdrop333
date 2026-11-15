@@ -19,10 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
-  const ok = setOrderRefund(params.id, auth.id, parsed.data.status, parsed.data.amountCents, parsed.data.note);
+  const ok = await setOrderRefund(params.id, auth.id, parsed.data.status, parsed.data.amountCents, parsed.data.note);
   if (!ok) return NextResponse.json({ error: "Could not update refund" }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

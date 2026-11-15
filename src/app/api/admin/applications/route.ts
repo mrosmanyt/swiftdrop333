@@ -11,15 +11,15 @@ export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const merchants = listMerchantsByKyb("pending").map((m) => ({
+  const merchants = await Promise.all((await listMerchantsByKyb("pending")).map(async (m) => ({
     ...m,
-    documents: listDocuments("merchant", m!.id),
-  }));
+    documents: await listDocuments("merchant", m!.id),
+  })));
 
-  const couriers = listCouriersByApproval("pending").map((c) => ({
+  const couriers = await Promise.all((await listCouriersByApproval("pending")).map(async (c) => ({
     ...c,
-    documents: listDocuments("courier", c!.id),
-  }));
+    documents: await listDocuments("courier", c!.id),
+  })));
 
   return NextResponse.json({ merchants, couriers });
 }

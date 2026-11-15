@@ -20,7 +20,8 @@ interface OrderData {
   dropoffAddress: string;
   dropoffLat: number | null;
   dropoffLng: number | null;
-  courierEmail: string | null;
+  courierEmail?: string | null;
+  courierAssigned?: boolean;
   courierVehicleType: string | null;
   proofOfDeliveryUrl: string | null;
   customerRating: number | null;
@@ -117,7 +118,7 @@ export default function TrackingLive({
         ))}
       </div>
 
-      {order.courierEmail && (
+      {(order.courierAssigned ?? !!order.courierEmail) && (
         <p className="mt-6 text-sm text-fg-muted">
           {tr("track.courierOn")} {String(order.courierVehicleType ?? "vehicle").toLowerCase()}.
         </p>

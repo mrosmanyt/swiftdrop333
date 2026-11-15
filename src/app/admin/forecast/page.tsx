@@ -6,9 +6,9 @@ export default async function AdminForecastPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const forecast = supplyForecast();
-  const onlineNow = countOnlineCouriers();
-  const total = countCouriers();
+  const forecast = await supplyForecast();
+  const onlineNow = await countOnlineCouriers();
+  const total = await countCouriers();
 
   // Group by zone for a readable per-zone hourly strip.
   const byZone = new Map<string, typeof forecast>();

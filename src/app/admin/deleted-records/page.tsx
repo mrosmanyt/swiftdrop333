@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { listDeletedMerchants, listDeletedCouriers, listDeletedOrders } from "@/lib/repo";
 import AdminRestoreButton from "@/components/AdminRestoreButton";
+import AdminEraseButton from "@/components/AdminEraseButton";
+import { RETENTION } from "@/lib/retention";
 import { ORDER_STATUS_LABEL, OrderStatus } from "@/lib/types";
 
 /**
@@ -15,17 +17,18 @@ export default async function DeletedRecordsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const merchants = listDeletedMerchants();
-  const couriers = listDeletedCouriers();
-  const orders = listDeletedOrders(200);
+  const merchants = await listDeletedMerchants();
+  const couriers = await listDeletedCouriers();
+  const orders = await listDeletedOrders(200);
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Deleted records</h1>
         <p className="text-sm text-fg-muted">
-          Deleted merchants, couriers, and orders live here — nothing is erased. Restore brings a record straight
-          back into its normal list.
+          Deleted merchants, couriers, and orders live here. Restore brings a record straight back into its normal
+          list. Personal data of a deleted merchant or courier is permanently erased automatically after{" "}
+          {RETENTION.erasureGraceDays} days — or right away with &quot;Erase personal data&quot; (for a deletion request).
         </p>
       </div>
 
@@ -50,7 +53,10 @@ export default async function DeletedRecordsPage() {
                     {m!.deletedAt ? new Date(m!.deletedAt).toLocaleString() : "—"}
                   </td>
                   <td className="p-3">
-                    <AdminRestoreButton resource="merchants" id={m!.id} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminRestoreButton resource="merchants" id={m!.id} />
+                      <AdminEraseButton userId={m!.userId} label={m!.businessName} />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -87,7 +93,10 @@ export default async function DeletedRecordsPage() {
                     {c!.deletedAt ? new Date(c!.deletedAt).toLocaleString() : "—"}
                   </td>
                   <td className="p-3">
-                    <AdminRestoreButton resource="couriers" id={c!.id} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminRestoreButton resource="couriers" id={c!.id} />
+                      <AdminEraseButton userId={c!.userId} label={c!.email} />
+                    </div>
                   </td>
                 </tr>
               ))}

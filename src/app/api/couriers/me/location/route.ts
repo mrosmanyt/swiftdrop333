@@ -23,18 +23,18 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
   // Tag the ping with the courier's current active order, if any, so the
   // route trail can be replayed per-delivery later.
-  const active = listActiveOrdersForCourier(courier.id);
+  const active = await listActiveOrdersForCourier(courier.id);
   const activeOrderId = active[0]?.id ?? null;
 
   // GPS spoofing check runs against the previous ping, before this one
   // overwrites it.
-  checkLocationJump(courier.id, parsed.data.lat, parsed.data.lng);
+  await checkLocationJump(courier.id, parsed.data.lat, parsed.data.lng);
 
-  updateCourierLocation(courier.id, parsed.data.lat, parsed.data.lng, activeOrderId);
+  await updateCourierLocation(courier.id, parsed.data.lat, parsed.data.lng, activeOrderId);
   return NextResponse.json({ ok: true });
 }

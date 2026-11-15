@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await getSessionUser();
-  if (user) setUserLocale(user.id, parsed.data.locale);
+  if (user) await setUserLocale(user.id, parsed.data.locale);
 
   const res = NextResponse.json({ ok: true, locale: parsed.data.locale });
   res.cookies.set("locale", parsed.data.locale, {

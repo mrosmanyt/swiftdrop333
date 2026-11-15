@@ -9,7 +9,7 @@ export default async function AdminCouriersPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const couriers = listCouriers();
+  const couriers = await listCouriers();
 
   return (
     <div className="space-y-4">

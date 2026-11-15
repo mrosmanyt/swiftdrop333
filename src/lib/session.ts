@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
-import type { Role } from "@/lib/repo";
+import { findUserById, type Role } from "@/lib/repo";
 
 export interface SessionUser {
   id: string;
@@ -14,7 +14,14 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
   const u = session.user as any;
-  return { id: u.id, email: u.email, role: u.role };
+  // The JWT is valid for its whole lifetime even if an admin suspends or
+  // deletes the account in the meantime — so re-check the live record on
+  // every request (a single primary-key lookup).
+  const live = u.id ? await findUserById(u.id) : null;
+  if (!live || live.status !== "active" || live.role !== u.role) return null;
+  // Changing the password signs out every session issued before it.
+  if (live.passwordChangedAt && Number(u.authAt ?? 0) < Date.parse(live.passwordChangedAt)) return null;
+  return { id: live.id, email: live.email, role: live.role };
 }
 
 /**

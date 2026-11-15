@@ -4,10 +4,10 @@ import { getOrderById } from "@/lib/repo";
 
 // GET /api/v1/orders/:id — order status for the merchant's own system.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const caller = authenticateApiRequest(req);
+  const caller = await authenticateApiRequest(req);
   if (!caller) return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
 
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (!order || order.merchantId !== caller.merchantId) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }

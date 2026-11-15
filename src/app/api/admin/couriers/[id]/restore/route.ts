@@ -8,9 +8,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileById(params.id);
+  const courier = await getCourierProfileById(params.id);
   if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
 
-  restoreCourier(courier.id, auth.id);
+  if (!await restoreCourier(courier.id, auth.id)) {
+    return NextResponse.json({ error: "This account's personal data was already erased — it can't be restored." }, { status: 409 });
+  }
   return NextResponse.json({ ok: true });
 }

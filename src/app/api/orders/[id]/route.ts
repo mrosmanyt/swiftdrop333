@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrderById, getCourierLocationTrail } from "@/lib/repo";
+import { getOrderById, getCourierLocationTrail, canViewFullOrder, toPublicOrder } from "@/lib/repo";
+import { getSessionUser } from "@/lib/session";
 
 /**
  * GET /api/orders/:id — powers the no-login customer tracking page, the
@@ -10,16 +11,22 @@ import { getOrderById, getCourierLocationTrail } from "@/lib/repo";
  * live map renders.
  */
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
   const showLocation = ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"].includes(order.status);
-  const trail = showLocation && order.courierId ? getCourierLocationTrail(order.courierId, order.id) : [];
+  const trail = showLocation && order.courierId ? await getCourierLocationTrail(order.courierId, order.id) : [];
+
+  // The merchant who owns it, its courier and admins get the full record;
+  // anyone else holding the tracking link gets only what the tracking page
+  // renders (see toPublicOrder) — no phone numbers, emails, fees or notes.
+  const viewer = await getSessionUser();
+  const full = await canViewFullOrder(viewer, order);
 
   return NextResponse.json({
-    order,
+    order: full ? order : toPublicOrder(order),
     courierLocation:
       showLocation && order.courierLastLat != null
         ? { lat: order.courierLastLat, lng: order.courierLastLng, at: order.courierLastLocationAt }

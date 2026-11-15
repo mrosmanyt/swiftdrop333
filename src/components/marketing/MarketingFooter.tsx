@@ -74,7 +74,9 @@ export default function MarketingFooter() {
         <div className="mt-12 flex flex-col gap-3 border-t border-line pt-6 text-xs text-fg-subtle sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} SwiftDrop Technologies Inc. Made in Canada 🇨🇦</p>
           <div className="flex flex-wrap items-center gap-5">
-            <span>Privacy</span>
+            <Link href="/privacy" className="transition-colors hover:text-fg">
+              Privacy
+            </Link>
             <span>Terms</span>
             <span>Courier agreement</span>
             <span>Accessibility</span>

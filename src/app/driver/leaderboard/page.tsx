@@ -8,11 +8,11 @@ export default async function DriverLeaderboardPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
+  const courier = await getCourierProfileByUserId(user.id);
   if (!courier) return <p>No courier profile found.</p>;
 
-  const board = weeklyLeaderboard(20);
-  const mine = courierWeeklyRank(courier.id);
+  const board = await weeklyLeaderboard(20);
+  const mine = await courierWeeklyRank(courier.id);
   const onBoard = board.some((r) => r.courierId === courier.id);
 
   return (

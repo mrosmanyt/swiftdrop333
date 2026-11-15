@@ -18,6 +18,7 @@ import {
 } from "@/lib/repo";
 import { haversineKm, routeBetween } from "@/lib/geo";
 import { pushToUser } from "@/lib/push";
+import { maybeRunRetention } from "@/lib/retention";
 
 /**
  * Auto-dispatch engine.
@@ -69,26 +70,26 @@ function distanceToPickup(courier: any, pickup: { lat: number | null; lng: numbe
 }
 
 /** Offer one order to the single best available courier. */
-export function dispatchOrder(orderId: string): { offered: boolean; courierId?: string; reason?: string } {
-  const order = getOrderById(orderId);
+export async function dispatchOrder(orderId: string): Promise<{ offered: boolean; courierId?: string; reason?: string }> {
+  const order = await getOrderById(orderId);
   if (!order) return { offered: false, reason: "order not found" };
   if (order.status !== "PENDING" || order.courierId) {
     return { offered: false, reason: "order no longer pending" };
   }
-  if (getActiveOfferForOrder(orderId)) {
+  if (await getActiveOfferForOrder(orderId)) {
     return { offered: false, reason: "offer already live" };
   }
 
-  const candidates = candidateCouriersForOrder(orderId);
+  const candidates = await candidateCouriersForOrder(orderId);
   if (!candidates.length) {
     // Everyone eligible has already seen it (or nobody is online) — open it
     // up so it doesn't get stuck waiting for a targeted offer.
-    if (order.dispatchMode !== "broadcast") setOrderDispatchMode(orderId, "broadcast");
+    if (order.dispatchMode !== "broadcast") await setOrderDispatchMode(orderId, "broadcast");
     return { offered: false, reason: "no candidates — broadcast" };
   }
 
   const best = rankCandidates(candidates, { lat: order.pickupLat, lng: order.pickupLng })[0];
-  createOffer(orderId, best.id, OFFER_TTL_SECONDS);
+  await createOffer(orderId, best.id, OFFER_TTL_SECONDS);
 
   // Fire-and-forget: a driver's offer is timed (OFFER_TTL_SECONDS), so this
   // needs to reach them the moment it's created, not whenever they next
@@ -108,20 +109,21 @@ export function dispatchOrder(orderId: string): { offered: boolean; courierId?: 
  * One pass of the dispatch loop: expire stale offers, then send a fresh
  * offer for every pending order that doesn't have one.
  */
-export function runDispatchTick() {
-  const expired = expireStaleOffers();
-  const pending = ordersNeedingDispatch();
+export async function runDispatchTick() {
+  const expired = await expireStaleOffers();
+  const pending = await ordersNeedingDispatch();
 
   let offered = 0;
   let broadcast = 0;
   for (const order of pending) {
-    const result = dispatchOrder(order!.id);
+    const result = await dispatchOrder(order!.id);
     if (result.offered) offered++;
     else if (result.reason?.includes("broadcast")) broadcast++;
   }
 
-  checkSurgeZones();
-  checkSlaBreaches();
+  await checkSurgeZones();
+  await checkSlaBreaches();
+  void maybeRunRetention();
 
   return { expired, considered: pending.length, offered, broadcast };
 }
@@ -133,14 +135,14 @@ export function runDispatchTick() {
  * null), so ops and the merchant both get a single heads-up rather than a
  * push every tick for the same late order.
  */
-function checkSlaBreaches() {
-  const breaches = findNewSlaBreaches();
+async function checkSlaBreaches() {
+  const breaches = await findNewSlaBreaches();
   if (!breaches.length) return;
 
-  const admins = adminUserIds();
+  const admins = await adminUserIds();
   for (const order of breaches) {
     if (!order) continue;
-    markSlaBreachAlerted(order.id);
+    await markSlaBreachAlerted(order.id);
 
     const label = order.customerName ? `${order.customerName} — ${order.dropoffAddress}` : order.dropoffAddress;
     for (const adminId of admins) {
@@ -152,8 +154,8 @@ function checkSlaBreaches() {
       }).catch(() => {});
     }
 
-    const merchant = order.merchantId ? getMerchantProfileById(order.merchantId) : null;
-    const merchantUser = merchant ? findUserById(merchant.userId) : null;
+    const merchant = order.merchantId ? await getMerchantProfileById(order.merchantId) : null;
+    const merchantUser = merchant ? await findUserById(merchant.userId) : null;
     if (merchantUser) {
       void pushToUser(merchantUser.id, {
         title: "Delivery running late",
@@ -172,12 +174,12 @@ function checkSlaBreaches() {
  * that zone is still live) creates a time-limited bonus and pushes every
  * online courier so the backlog actually gets seen, not just logged.
  */
-function checkSurgeZones() {
-  for (const { zoneId, waitingCount } of pendingCountsByZone()) {
-    const alert = maybeCreateSurgeAlert(zoneId, waitingCount);
+async function checkSurgeZones() {
+  for (const { zoneId, waitingCount } of await pendingCountsByZone()) {
+    const alert = await maybeCreateSurgeAlert(zoneId, waitingCount);
     if (!alert) continue;
 
-    const courierUserIds = onlineCourierUserIds();
+    const courierUserIds = await onlineCourierUserIds();
     for (const userId of courierUserIds) {
       void pushToUser(userId, {
         title: `Surge — ${alert.zoneName}`,
@@ -197,13 +199,13 @@ const SURGE_ALERT_MINUTES = Number(process.env.SURGE_ALERT_TTL_MINUTES ?? 30);
  * detour-adjusted straight line (see lib/geo.ts).
  */
 export async function refreshOrderRoute(orderId: string) {
-  const order = getOrderById(orderId);
+  const order = await getOrderById(orderId);
   if (!order?.pickupLat || !order?.pickupLng || !order?.dropoffLat || !order?.dropoffLng) return null;
 
   const route = await routeBetween(
     { lat: order.pickupLat, lng: order.pickupLng },
     { lat: order.dropoffLat, lng: order.dropoffLng }
   );
-  setOrderRouteInfo(orderId, route.distanceKm, route.source, route.durationMin);
+  await setOrderRouteInfo(orderId, route.distanceKm, route.source, route.durationMin);
   return route;
 }

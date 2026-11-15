@@ -30,12 +30,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if ("error" in resolved && resolved.error) return resolved.error;
   const { role } = resolved as any;
 
-  markMessagesRead(params.id, role);
+  await markMessagesRead(params.id, role);
 
   return NextResponse.json({
-    messages: listMessages(params.id),
+    messages: await listMessages(params.id),
     you: role,
-    readState: getReadState(params.id),
+    readState: await getReadState(params.id),
     typing: whoIsTyping(params.id, role),
   });
 }
@@ -56,10 +56,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  addMessage({ orderId: params.id, senderRole: role, senderUserId: userId, body: parsed.data.body });
+  await addMessage({ orderId: params.id, senderRole: role, senderUserId: userId, body: parsed.data.body });
 
   // Sending a message also means you've read up to now.
-  markMessagesRead(params.id, role);
+  await markMessagesRead(params.id, role);
 
   // Nudge the customer by SMS when someone else writes to them.
   if (role !== "customer") {

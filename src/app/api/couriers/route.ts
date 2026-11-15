@@ -9,5 +9,5 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const onlineOnly = searchParams.get("online") === "true";
-  return NextResponse.json({ couriers: listCouriers({ onlineOnly }) });
+  return NextResponse.json({ couriers: await listCouriers({ onlineOnly }) });
 }

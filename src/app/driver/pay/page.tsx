@@ -15,11 +15,11 @@ export default async function DriverPayPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
+  const courier = await getCourierProfileByUserId(user.id);
   if (!courier) return <p>No courier profile found.</p>;
 
-  const p14 = courierPayTransparency(courier.id, 14);
-  const p90 = courierPayTransparency(courier.id, 90);
+  const p14 = await courierPayTransparency(courier.id, 14);
+  const p90 = await courierPayTransparency(courier.id, 90);
 
   return (
     <div className="space-y-6">

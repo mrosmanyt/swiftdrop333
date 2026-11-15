@@ -17,11 +17,11 @@ export default async function AdminOverviewPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const merchantCount = countMerchants();
-  const courierCount = countCouriers();
-  const onlineCouriers = countOnlineCouriers();
-  const orderCounts = orderStatusCounts();
-  const ops = opsSummary();
+  const merchantCount = await countMerchants();
+  const courierCount = await countCouriers();
+  const onlineCouriers = await countOnlineCouriers();
+  const orderCounts = await orderStatusCounts();
+  const ops = await opsSummary();
 
   const totalOrders = orderCounts.reduce((sum, r) => sum + r.count, 0);
   const delivered = orderCounts.find((r) => r.status === "DELIVERED")?.count ?? 0;

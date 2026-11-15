@@ -12,14 +12,14 @@ import { getCourierProfileByUserId, getMerchantProfileByUserId, getOrderById } f
  * attached to this order.
  */
 export async function resolveSender(orderId: string) {
-  const order = getOrderById(orderId);
+  const order = await getOrderById(orderId);
   if (!order) return { error: NextResponse.json({ error: "Order not found" }, { status: 404 }) };
 
   const user = await getSessionUser();
   if (!user) return { order, role: "customer" as const, userId: null };
 
   if (user.role === "COURIER") {
-    const courier = getCourierProfileByUserId(user.id);
+    const courier = await getCourierProfileByUserId(user.id);
     if (courier && order.courierId === courier.id) {
       return { order, role: "courier" as const, userId: user.id };
     }
@@ -27,7 +27,7 @@ export async function resolveSender(orderId: string) {
   }
 
   if (user.role === "MERCHANT") {
-    const merchant = getMerchantProfileByUserId(user.id);
+    const merchant = await getMerchantProfileByUserId(user.id);
     if (merchant && order.merchantId === merchant.id) {
       return { order, role: "merchant" as const, userId: user.id };
     }

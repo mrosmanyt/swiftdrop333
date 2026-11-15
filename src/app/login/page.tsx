@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AuthShell from "@/components/AuthShell";
 
 /**
  * Single sign-in page shared by all 3 internal roles — the credentials
  * provider checks the user's role and the middleware routes them.
- *
- * Seeded test accounts (npm run seed), all password "password123":
- *   merchant@example.com · courier@example.com
  */
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Arriving from a sign-up where the account was created but the automatic
+  // sign-in didn't go through.
+  const [justCreated, setJustCreated] = useState(false);
+  useEffect(() => {
+    setJustCreated(new URLSearchParams(window.location.search).get("created") === "1");
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,11 +29,19 @@ export default function LoginPage() {
       email: form.get("email"),
       password: form.get("password"),
       redirect: false,
-    });
-    setBusy(false);
+    }).catch(() => null);
 
-    if (res?.error) {
-      setError("Invalid email or password.");
+    if (!res) {
+      setBusy(false);
+      setError("Couldn't reach the server. Check your connection and try again.");
+      return;
+    }
+    if (res.error) {
+      setBusy(false);
+      // "CredentialsSignin" is NextAuth's generic wrong-email-or-password
+      // code; anything else is a message we threw on purpose (rate limit,
+      // suspended account, temporary outage) and is safe to show as-is.
+      setError(res.error === "CredentialsSignin" ? "Invalid email or password." : res.error);
       return;
     }
 
@@ -59,6 +70,11 @@ export default function LoginPage() {
         </>
       }
     >
+      {justCreated && (
+        <p className="mb-3 rounded-lg border border-line bg-bg p-2.5 text-sm text-fg-muted">
+          Your account was created. Sign in to continue.
+        </p>
+      )}
       <form onSubmit={handleSubmit} className="space-y-3">
         <label className="block text-sm text-fg-muted">
           Email

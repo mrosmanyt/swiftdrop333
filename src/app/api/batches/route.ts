@@ -14,38 +14,42 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   if (user.role === "COURIER") {
-    const courier = getCourierProfileByUserId(user.id);
-    const blocked = courierBlockReason(courier);
+    const courier = await getCourierProfileByUserId(user.id);
+    const blocked = await courierBlockReason(courier);
     if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
     const headStart = ["PRO", "GOLD"].includes(courier!.tier) ? 0 : 120_000;
-    const batches = listOpenBatches()
+    const batches = await Promise.all((await listOpenBatches())
       .filter((b) => Date.now() - new Date(b.created_at).getTime() >= headStart)
-      .map((b) => ({
+      .map(async (b) => ({
         id: b.id,
         stopCount: b.stop_count,
         totalKm: b.total_km,
         totalCourierFeeCents: b.total_courier_fee_cents,
         createdAt: b.created_at,
-        orders: listOrdersInBatch(b.id).map((o) => ({
+        orders: (await listOrdersInBatch(b.id)).map((o) => ({
           id: o!.id,
           sequence: o!.batchSequence,
           dropoffAddress: o!.dropoffAddress,
           customerName: o!.customerName,
         })),
-      }));
+      })));
 
     return NextResponse.json({ batches });
   }
 
-  // Admin view — everything, no head start.
-  const batches = listOpenBatches().map((b) => ({
+  // Admin view — everything, no head start. Anyone else (merchant,
+  // customer) is refused rather than falling through to full order rows.
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden for this role" }, { status: 403 });
+  }
+  const batches = await Promise.all((await listOpenBatches()).map(async (b) => ({
     id: b.id,
     stopCount: b.stop_count,
     totalKm: b.total_km,
     totalCourierFeeCents: b.total_courier_fee_cents,
     createdAt: b.created_at,
-    orders: listOrdersInBatch(b.id),
-  }));
+    orders: await listOrdersInBatch(b.id),
+  })));
   return NextResponse.json({ batches });
 }

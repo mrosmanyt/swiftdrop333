@@ -20,13 +20,13 @@ export async function GET() {
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
-  const challenges = listActiveChallenges()
+  const challenges = await Promise.all((await listActiveChallenges())
     .filter((c) => (TIER_RANK[courier.tier] ?? 0) >= (TIER_RANK[c.min_tier] ?? 0))
-    .map((c) => {
-      const progress = courierDeliveriesBetween(courier.id, c.starts_at, c.ends_at);
+    .map(async (c) => {
+      const progress = await courierDeliveriesBetween(courier.id, c.starts_at, c.ends_at);
       return {
         id: c.id,
         title: c.title,
@@ -37,9 +37,9 @@ export async function GET() {
         minTier: c.min_tier,
         progress,
         complete: progress >= c.target_deliveries,
-        claimed: hasClaimedChallenge(c.id, courier.id),
+        claimed: await hasClaimedChallenge(c.id, courier.id),
       };
-    });
+    }));
 
   return NextResponse.json({ challenges });
 }
@@ -54,13 +54,13 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
-  const challenge = listActiveChallenges().find((c) => c.id === parsed.data.challengeId);
+  const challenge = (await listActiveChallenges()).find((c) => c.id === parsed.data.challengeId);
   if (!challenge) return NextResponse.json({ error: "Challenge not found or ended" }, { status: 404 });
 
-  const progress = courierDeliveriesBetween(courier.id, challenge.starts_at, challenge.ends_at);
+  const progress = await courierDeliveriesBetween(courier.id, challenge.starts_at, challenge.ends_at);
   if (progress < challenge.target_deliveries) {
     return NextResponse.json(
       { error: `Not there yet — ${progress}/${challenge.target_deliveries} deliveries.` },
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ok = claimChallenge(challenge.id, courier.id, challenge.bonus_cents);
+  const ok = await claimChallenge(challenge.id, courier.id, challenge.bonus_cents);
   if (!ok) return NextResponse.json({ error: "Already claimed" }, { status: 409 });
 
   return NextResponse.json({ ok: true, bonusCents: challenge.bonus_cents });

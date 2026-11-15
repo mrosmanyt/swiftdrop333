@@ -8,9 +8,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const merchant = getMerchantProfileById(params.id);
+  const merchant = await getMerchantProfileById(params.id);
   if (!merchant) return NextResponse.json({ error: "Merchant not found" }, { status: 404 });
 
-  restoreMerchant(merchant.id, auth.id);
+  if (!await restoreMerchant(merchant.id, auth.id)) {
+    return NextResponse.json({ error: "This account's personal data was already erased — it can't be restored." }, { status: 409 });
+  }
   return NextResponse.json({ ok: true });
 }

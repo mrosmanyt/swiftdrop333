@@ -10,8 +10,8 @@ export default async function MerchantOrderDetailPage({ params }: { params: { id
   const user = await getSessionUser();
   if (!user || user.role !== "MERCHANT") redirect("/login");
 
-  const merchant = getMerchantProfileByUserId(user.id);
-  const order = getOrderById(params.id);
+  const merchant = await getMerchantProfileByUserId(user.id);
+  const order = await getOrderById(params.id);
   if (!order || !merchant || order.merchantId !== merchant.id) notFound();
 
   const cancellable = ["PENDING", "ASSIGNED"].includes(order.status);

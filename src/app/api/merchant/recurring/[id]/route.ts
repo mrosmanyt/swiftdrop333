@@ -10,13 +10,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const auth = await requireRole("MERCHANT");
   if (auth instanceof NextResponse) return auth;
 
-  const merchant = getMerchantProfileByUserId(auth.id);
+  const merchant = await getMerchantProfileByUserId(auth.id);
   if (!merchant) return NextResponse.json({ error: "No merchant profile" }, { status: 404 });
 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const ok = setRecurringActive(params.id, merchant.id, parsed.data.active);
+  const ok = await setRecurringActive(params.id, merchant.id, parsed.data.active);
   if (!ok) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

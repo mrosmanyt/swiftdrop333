@@ -14,11 +14,16 @@ export default function PayoutPanel() {
   const [done, setDone] = useState<string | null>(null);
 
   async function load() {
+    try {
     const res = await fetch("/api/couriers/me/payouts");
-    if (!res.ok) return;
+    if (!res.ok) throw new Error("Could not load payouts.");
     const data = await res.json();
     setSummary(data.summary);
     setFee(data.instantFeePercent);
+    setError(null);
+    } catch {
+      setError("Could not load payouts. Check your connection and try again.");
+    }
   }
 
   useEffect(() => {
@@ -27,21 +32,22 @@ export default function PayoutPanel() {
 
   async function request(method: "instant" | "weekly") {
     const cents = Math.round(Number(amount) * 100);
-    if (!cents || cents <= 0) {
+    if (!Number.isSafeInteger(cents) || cents <= 0) {
       setError("Enter an amount.");
       return;
     }
     setBusy(true);
     setError(null);
+    setDone(null);
+    try {
     const res = await fetch("/api/couriers/me/payouts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amountCents: cents, method }),
     });
-    setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Could not request payout.");
+      setError(typeof data.error === "string" ? data.error : "Could not request payout.");
       return;
     }
     const data = await res.json();
@@ -53,9 +59,20 @@ export default function PayoutPanel() {
     setAmount("");
     load();
     router.refresh();
+    } catch {
+      setError("Connection interrupted. Refresh and check your payout requests before submitting again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (!summary) return null;
+  if (!summary) return (
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <p role="status" className="text-sm text-fg-muted">{error ?? "Loading payouts…"}</p>
+      {error && <button type="button" onClick={() => { setError(null); void load(); }}
+        className="mt-2 rounded-lg border border-line px-3 py-2 text-sm text-accent">Retry</button>}
+    </div>
+  );
 
   return (
     <div className="rounded-xl border border-line bg-surface p-4">

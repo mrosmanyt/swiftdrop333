@@ -9,9 +9,9 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const ok = adminUnassignOrder(params.id, auth.id);
+  const ok = await adminUnassignOrder(params.id, auth.id);
   if (!ok) return NextResponse.json({ error: "Order isn't currently assigned" }, { status: 409 });
 
-  runDispatchTick();
+  await runDispatchTick();
   return NextResponse.json({ ok: true });
 }

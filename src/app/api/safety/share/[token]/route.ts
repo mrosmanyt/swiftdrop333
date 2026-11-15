@@ -8,10 +8,10 @@ import { getActiveLocationShare, getCourierProfileById } from "@/lib/repo";
  * unguessable token is the access control.
  */
 export async function GET(_req: NextRequest, { params }: { params: { token: string } }) {
-  const share = getActiveLocationShare(params.token);
+  const share = await getActiveLocationShare(params.token);
   if (!share) return NextResponse.json({ error: "This link has expired or doesn't exist." }, { status: 404 });
 
-  const courier = getCourierProfileById(share.courierId);
+  const courier = await getCourierProfileById(share.courierId);
   if (!courier) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json({

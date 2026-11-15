@@ -14,10 +14,10 @@ export default async function MerchantAnalyticsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "MERCHANT") redirect("/login");
 
-  const merchant = getMerchantProfileByUserId(user.id);
+  const merchant = await getMerchantProfileByUserId(user.id);
   if (!merchant) return <p>No merchant profile found.</p>;
 
-  const { dailySeries, topCustomers, successRate, delivered, terminal, serviceBreakdown } = merchantAnalytics(
+  const { dailySeries, topCustomers, successRate, delivered, terminal, serviceBreakdown } = await merchantAnalytics(
     merchant.id,
     14
   );

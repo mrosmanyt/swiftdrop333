@@ -19,6 +19,7 @@ const LINKS: SidebarLink[] = [
   { href: "/driver/pay", label: "Pay", icon: <Icon d="M2 7h20v4H2zM2 7v10h20V7M6 15h4" /> },
   { href: "/driver/documents", label: "Documents", icon: <Icon d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6" /> },
   { href: "/driver/safety", label: "Safety", icon: <Icon d="M12 2l8 4v5c0 5.5-3.5 9-8 11-4.5-2-8-5.5-8-11V6z M9.5 12l1.8 1.8L15 10" /> },
+  { href: "/driver/account", label: "Account & privacy", icon: <Icon d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" /> },
 ];
 
 export default function DriverLayout({ children }: { children: React.ReactNode }) {

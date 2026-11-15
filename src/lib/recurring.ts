@@ -13,7 +13,7 @@ export async function generateDueRecurringOrders(now = new Date()) {
   const todayKey = now.toISOString().slice(0, 10);
   const weekday = now.getDay(); // 0 = Sunday
 
-  const schedules = listActiveRecurringOrders();
+  const schedules = await listActiveRecurringOrders();
   const created: string[] = [];
 
   for (const s of schedules) {
@@ -56,10 +56,10 @@ export async function generateDueRecurringOrders(now = new Date()) {
         source: "recurring",
       });
       created.push(result.orderId);
-      markRecurringGenerated(s.id, todayKey);
+      await markRecurringGenerated(s.id, todayKey);
     } catch {
       // A broken schedule (deleted zone, say) must not stop the others.
-      markRecurringGenerated(s.id, todayKey);
+      await markRecurringGenerated(s.id, todayKey);
     }
   }
 

@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const status = new URL(req.url).searchParams.get("status") ?? "open";
-  return NextResponse.json({ flags: listFraudFlags(status) });
+  return NextResponse.json({ flags: await listFraudFlags(status) });
 }
 
 const schema = z.object({
@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const ok = resolveFraudFlag(parsed.data.flagId, parsed.data.status, auth.id);
+  const ok = await resolveFraudFlag(parsed.data.flagId, parsed.data.status, auth.id);
   if (!ok) return NextResponse.json({ error: "Flag not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

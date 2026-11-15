@@ -10,13 +10,13 @@ export async function GET() {
   const auth = await requireRole("MERCHANT");
   if (auth instanceof NextResponse) return auth;
 
-  const merchant = getMerchantProfileByUserId(auth.id);
+  const merchant = await getMerchantProfileByUserId(auth.id);
   if (!merchant) return NextResponse.json({ error: "No merchant profile" }, { status: 404 });
 
   // Opening this page is a good moment to materialise anything due today.
   await generateDueRecurringOrders();
 
-  return NextResponse.json({ schedules: listRecurringOrders(merchant.id) });
+  return NextResponse.json({ schedules: await listRecurringOrders(merchant.id) });
 }
 
 const schema = z.object({
@@ -46,14 +46,14 @@ export async function POST(req: NextRequest) {
   const auth = await requireRole("MERCHANT");
   if (auth instanceof NextResponse) return auth;
 
-  const merchant = getMerchantProfileByUserId(auth.id);
-  const blocked = merchantBlockReason(merchant);
+  const merchant = await getMerchantProfileByUserId(auth.id);
+  const blocked = await merchantBlockReason(merchant);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const recurringId = createRecurringOrder({
+  const recurringId = await createRecurringOrder({
     ...parsed.data,
     merchantId: merchant!.id,
     customerEmail: parsed.data.customerEmail || null,

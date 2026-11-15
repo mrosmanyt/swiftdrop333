@@ -11,9 +11,9 @@ export async function GET(req: NextRequest) {
   if (searchParams.get("all") === "true") {
     const auth = await requireRole("ADMIN");
     if (auth instanceof NextResponse) return auth;
-    return NextResponse.json({ zones: listAllZones() });
+    return NextResponse.json({ zones: await listAllZones() });
   }
-  return NextResponse.json({ zones: listActiveZones() });
+  return NextResponse.json({ zones: await listActiveZones() });
 }
 
 const createZoneSchema = z.object({
@@ -33,6 +33,6 @@ export async function POST(req: NextRequest) {
   const parsed = createZoneSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const zoneId = createZone(parsed.data);
+  const zoneId = await createZone(parsed.data);
   return NextResponse.json({ zoneId }, { status: 201 });
 }

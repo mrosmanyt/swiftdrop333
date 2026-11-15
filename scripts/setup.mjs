@@ -19,7 +19,7 @@ const major = Number(process.versions.node.split(".")[0]);
 if (major < 22) {
   console.error(
     `\n  ✗ Node ${process.versions.node} detected — SwiftDrop needs Node 22 or newer\n` +
-      `    (the database uses Node's built-in node:sqlite module).\n` +
+      `    (the same version the app is deployed on).\n` +
       `    Download the LTS build from https://nodejs.org and run this again.\n`
   );
   process.exit(1);

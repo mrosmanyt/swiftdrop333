@@ -9,7 +9,7 @@ export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const couriers = listCouriers();
+  const couriers = await listCouriers();
   const csv = toCsv(
     couriers.map((c) => ({
       id: c!.id,

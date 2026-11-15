@@ -11,18 +11,20 @@ export interface MerchantLike {
   id: string;
   userId: string;
   kybStatus: string;
+  deletedAt?: string | null;
 }
 
 export interface CourierLike {
   id: string;
   userId: string;
   approvalStatus: string;
+  deletedAt?: string | null;
 }
 
-export function merchantBlockReason(merchant: MerchantLike | null): string | null {
+export async function merchantBlockReason(merchant: MerchantLike | null): Promise<string | null> {
   if (!merchant) return "No merchant profile found for this account.";
-  const user = findUserById(merchant.userId);
-  if (user?.status === "suspended") {
+  const user = await findUserById(merchant.userId);
+  if (!user || user.status !== "active" || merchant.deletedAt) {
     return "This account is suspended. Contact SwiftDrop support.";
   }
   if (merchant.kybStatus === "rejected") {
@@ -34,10 +36,10 @@ export function merchantBlockReason(merchant: MerchantLike | null): string | nul
   return null;
 }
 
-export function courierBlockReason(courier: CourierLike | null): string | null {
+export async function courierBlockReason(courier: CourierLike | null): Promise<string | null> {
   if (!courier) return "No courier profile found for this account.";
-  const user = findUserById(courier.userId);
-  if (user?.status === "suspended") {
+  const user = await findUserById(courier.userId);
+  if (!user || user.status !== "active" || courier.deletedAt) {
     return "This account is suspended. Contact SwiftDrop support.";
   }
   if (courier.approvalStatus === "rejected") {

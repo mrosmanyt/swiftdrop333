@@ -17,11 +17,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   if (auth.role === "MERCHANT") {
-    const merchant = getMerchantProfileByUserId(auth.id);
+    const merchant = await getMerchantProfileByUserId(auth.id);
     if (!merchant || order.merchantId !== merchant.id) {
       return NextResponse.json({ error: "Not your order" }, { status: 403 });
     }
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // A merchant is only ever billed once an order is DELIVERED (see
   // markOrderDelivered), so nothing has actually been charged yet at
   // PENDING/ASSIGNED — no refund owed, just a straight cancellation.
-  const ok = cancelOrder(params.id, auth.id, parsed.data.reason, { wasCharged: false });
+  const ok = await cancelOrder(params.id, auth.id, parsed.data.reason, { wasCharged: false });
   if (!ok) {
     return NextResponse.json(
       { error: "This order can no longer be cancelled — it's already been picked up." },
@@ -38,10 +38,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  const updated = getOrderById(params.id);
+  const updated = await getOrderById(params.id);
   if (updated) {
-    const merchantProfile = updated.merchantId ? getMerchantProfileById(updated.merchantId) : null;
-    const merchantUser = merchantProfile ? findUserById(merchantProfile.userId) : null;
+    const merchantProfile = updated.merchantId ? await getMerchantProfileById(updated.merchantId) : null;
+    const merchantUser = merchantProfile ? await findUserById(merchantProfile.userId) : null;
     await notifyCancelled(updated as any, merchantUser?.email ?? null, parsed.data.reason);
   }
 

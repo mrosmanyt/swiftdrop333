@@ -6,7 +6,7 @@ import { listPayoutRequests, setPayoutStatus } from "@/lib/repo";
 export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
-  return NextResponse.json({ requests: listPayoutRequests() });
+  return NextResponse.json({ requests: await listPayoutRequests() });
 }
 
 const schema = z.object({
@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const ok = setPayoutStatus(parsed.data.requestId, parsed.data.status, auth.id, parsed.data.note);
+  const ok = await setPayoutStatus(parsed.data.requestId, parsed.data.status, auth.id, parsed.data.note);
   if (!ok) return NextResponse.json({ error: "Request not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

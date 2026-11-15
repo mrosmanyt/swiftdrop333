@@ -25,17 +25,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileById(params.id);
+  const courier = await getCourierProfileById(params.id);
   if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
 
   if (parsed.data.backgroundCheckStatus) {
-    setCourierBackgroundCheck(courier.id, parsed.data.backgroundCheckStatus);
+    await setCourierBackgroundCheck(courier.id, parsed.data.backgroundCheckStatus);
   }
   if (parsed.data.approvalStatus) {
-    setCourierApprovalStatus(courier.id, parsed.data.approvalStatus, auth.id, parsed.data.notes);
+    await setCourierApprovalStatus(courier.id, parsed.data.approvalStatus, auth.id, parsed.data.notes);
   }
   if (parsed.data.userStatus) {
-    setUserStatus(courier.userId, parsed.data.userStatus);
+    await setUserStatus(courier.userId, parsed.data.userStatus);
   }
 
   return NextResponse.json({ ok: true });
@@ -48,9 +48,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileById(params.id);
+  const courier = await getCourierProfileById(params.id);
   if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
 
-  softDeleteCourier(courier.id, auth.id);
+  await softDeleteCourier(courier.id, auth.id);
   return NextResponse.json({ ok: true });
 }

@@ -29,14 +29,14 @@ export async function POST(req: NextRequest) {
 
   const user = await getSessionUser();
   if (user) {
-    savePushSubscription("user", user.id, parsed.data.subscription);
+    await savePushSubscription("user", user.id, parsed.data.subscription);
     return NextResponse.json({ ok: true });
   }
 
   if (parsed.data.orderId) {
-    const order = getOrderById(parsed.data.orderId);
+    const order = await getOrderById(parsed.data.orderId);
     if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    savePushSubscription("order", order.id, parsed.data.subscription);
+    await savePushSubscription("order", order.id, parsed.data.subscription);
     return NextResponse.json({ ok: true });
   }
 

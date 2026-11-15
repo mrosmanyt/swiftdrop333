@@ -39,41 +39,52 @@ export default function ActiveDeliveryCard({ order }: { order: Order }) {
   async function post(path: string, body?: unknown) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/orders/${order.id}/${path}`, {
-      method: "POST",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Something went wrong.");
+    try {
+      const res = await fetch(`/api/orders/${order.id}/${path}`, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(typeof data.error === "string" ? data.error : "Something went wrong.");
+        return false;
+      }
+      router.refresh();
+      return true;
+    } catch {
+      setError("Connection interrupted. Refresh the order to check its status before trying again.");
       return false;
+    } finally {
+      setBusy(false);
     }
-    router.refresh();
-    return true;
   }
 
   async function ageVerify(method: "id_checked" | "refused_underage" | "refused_no_id") {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/orders/${order.id}/age-verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method, dobConfirmed: method === "id_checked" }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Could not record the ID check.");
-      return;
+    try {
+      const res = await fetch(`/api/orders/${order.id}/age-verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method, dobConfirmed: method === "id_checked" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(typeof data.error === "string" ? data.error : "Could not record the ID check.");
+        return;
+      }
+      const data = await res.json();
+      if (data.mustReturn) {
+        // Refused for age reasons — the parcel goes back, it can't be left.
+        await post("returning", { reason: `Age verification failed (${method.replace(/_/g, " ")})` });
+      }
+      router.refresh();
+    } catch {
+      setError("Connection interrupted. Refresh the order to check its status before trying again.");
+    } finally {
+      setBusy(false);
     }
-    const data = await res.json();
-    if (data.mustReturn) {
-      // Refused for age reasons — the parcel goes back, it can't be left.
-      await post("returning", { reason: `Age verification failed (${method.replace(/_/g, " ")})` });
-    }
-    router.refresh();
   }
 
   async function handleDeliver() {
@@ -83,16 +94,21 @@ export default function ActiveDeliveryCard({ order }: { order: Order }) {
     }
     setBusy(true);
     setError(null);
-    const form = new FormData();
-    form.append("file", file);
-    const uploadRes = await fetch("/api/upload", { method: "POST", body: form });
-    if (!uploadRes.ok) {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const uploadRes = await fetch("/api/upload", { method: "POST", body: form });
+      if (!uploadRes.ok) {
+          setError("Photo upload failed.");
+        return;
+      }
+      const { url } = await uploadRes.json();
+      await post("deliver", { proofOfDeliveryUrl: url });
+    } catch {
+      setError("Connection interrupted. Refresh the order to check its status before trying again.");
+    } finally {
       setBusy(false);
-      setError("Photo upload failed.");
-      return;
     }
-    const { url } = await uploadRes.json();
-    await post("deliver", { proofOfDeliveryUrl: url });
   }
 
   return (

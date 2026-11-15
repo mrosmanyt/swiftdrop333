@@ -1,0 +1,3269 @@
+[
+  {
+    "type": "table",
+    "name": "users",
+    "sql": "CREATE TABLE users (\n  id TEXT PRIMARY KEY,\n  email TEXT UNIQUE NOT NULL,\n  phone TEXT,\n  password_hash TEXT NOT NULL,\n  role TEXT NOT NULL CHECK(role IN ('MERCHANT','COURIER','ADMIN','CUSTOMER')),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n, full_name TEXT, status TEXT NOT NULL DEFAULT 'active', locale TEXT NOT NULL DEFAULT 'en', erased_at TEXT, erase_after TEXT, password_changed_at TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "email",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "password_hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "role",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "updated_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "full_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'active'",
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "locale",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'en'",
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "erased_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "erase_after",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "password_changed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "merchant_profiles",
+    "sql": "CREATE TABLE merchant_profiles (\n  id TEXT PRIMARY KEY,\n  user_id TEXT UNIQUE NOT NULL REFERENCES users(id),\n  business_name TEXT NOT NULL,\n  kyb_status TEXT NOT NULL DEFAULT 'pending',\n  payout_method TEXT,\n  shopify_domain TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, contact_name TEXT, business_phone TEXT, business_address TEXT, business_number TEXT, website TEXT, kyb_notes TEXT, reviewed_at TEXT, reviewed_by TEXT, rating REAL NOT NULL DEFAULT 5.0, deleted_at TEXT, deleted_by TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "business_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "kyb_status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "payout_method",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "shopify_domain",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "contact_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "business_phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "business_address",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "business_number",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "website",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "kyb_notes",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "reviewed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "reviewed_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "rating",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": "5.0",
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "deleted_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "deleted_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "courier_profiles",
+    "sql": "CREATE TABLE courier_profiles (\n  id TEXT PRIMARY KEY,\n  user_id TEXT UNIQUE NOT NULL REFERENCES users(id),\n  vehicle_type TEXT NOT NULL CHECK(vehicle_type IN ('BIKE','SCOOTER','CAR','VAN')),\n  license_number TEXT,\n  insurance_doc_url TEXT,\n  background_check_status TEXT NOT NULL DEFAULT 'pending',\n  tier TEXT NOT NULL DEFAULT 'STARTER',\n  rating REAL NOT NULL DEFAULT 5.0,\n  payout_account_id TEXT,\n  is_online INTEGER NOT NULL DEFAULT 0,\n  last_lat REAL,\n  last_lng REAL,\n  last_location_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, full_name TEXT, phone TEXT, license_expiry TEXT, insurance_provider TEXT, insurance_policy_number TEXT, insurance_expiry TEXT, license_doc_url TEXT, vehicle_make_model TEXT, vehicle_plate TEXT, approval_status TEXT NOT NULL DEFAULT 'pending', approval_notes TEXT, reviewed_at TEXT, reviewed_by TEXT, payout_balance_cents INTEGER NOT NULL DEFAULT 0, has_insulated_bag INTEGER NOT NULL DEFAULT 0, locale TEXT NOT NULL DEFAULT 'en', deleted_at TEXT, deleted_by TEXT, emergency_contact_name TEXT, emergency_contact_phone TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "vehicle_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "license_number",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "insurance_doc_url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "background_check_status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "tier",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'STARTER'",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "rating",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": "5.0",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "payout_account_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "is_online",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "last_lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "last_lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "last_location_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "full_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "license_expiry",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "insurance_provider",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "insurance_policy_number",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "insurance_expiry",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "license_doc_url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 21,
+        "name": "vehicle_make_model",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 22,
+        "name": "vehicle_plate",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 23,
+        "name": "approval_status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 24,
+        "name": "approval_notes",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 25,
+        "name": "reviewed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 26,
+        "name": "reviewed_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 27,
+        "name": "payout_balance_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 28,
+        "name": "has_insulated_bag",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 29,
+        "name": "locale",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'en'",
+        "pk": 0
+      },
+      {
+        "cid": 30,
+        "name": "deleted_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 31,
+        "name": "deleted_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 32,
+        "name": "emergency_contact_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 33,
+        "name": "emergency_contact_phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "admin_profiles",
+    "sql": "CREATE TABLE admin_profiles (\n  id TEXT PRIMARY KEY,\n  user_id TEXT UNIQUE NOT NULL REFERENCES users(id),\n  permissions TEXT NOT NULL DEFAULT '[]'\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "permissions",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'[]'",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "zones",
+    "sql": "CREATE TABLE zones (\n  id TEXT PRIMARY KEY,\n  city TEXT NOT NULL,\n  name TEXT NOT NULL,\n  base_rate_cents INTEGER NOT NULL,\n  per_km_cents INTEGER NOT NULL DEFAULT 0,\n  is_active INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, surge_multiplier REAL NOT NULL DEFAULT 1.0, surge_note TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "city",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "base_rate_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "per_km_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "is_active",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "1",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "surge_multiplier",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": "1.0",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "surge_note",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "orders",
+    "sql": "CREATE TABLE orders (\n  id TEXT PRIMARY KEY,\n  merchant_id TEXT NOT NULL REFERENCES merchant_profiles(id),\n  courier_id TEXT REFERENCES courier_profiles(id),\n  zone_id TEXT REFERENCES zones(id),\n  pickup_address TEXT NOT NULL,\n  pickup_lat REAL,\n  pickup_lng REAL,\n  dropoff_address TEXT NOT NULL,\n  dropoff_lat REAL,\n  dropoff_lng REAL,\n  customer_name TEXT NOT NULL,\n  customer_phone TEXT,\n  customer_email TEXT,\n  delivery_instructions TEXT,\n  package_weight_kg REAL,\n  service_type TEXT NOT NULL DEFAULT 'SAME_DAY',\n  status TEXT NOT NULL DEFAULT 'PENDING',\n  price_cents INTEGER NOT NULL,\n  courier_fee_cents INTEGER NOT NULL,\n  platform_fee_cents INTEGER NOT NULL,\n  proof_of_delivery_url TEXT,\n  customer_rating INTEGER,\n  customer_comment TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  assigned_at TEXT,\n  picked_up_at TEXT,\n  delivered_at TEXT\n, window_start TEXT, window_end TEXT, distance_km REAL, distance_source TEXT, eta_minutes REAL, dispatch_mode TEXT NOT NULL DEFAULT 'auto', failure_reason TEXT, returned_at TEXT, arrived_at_pickup TEXT, merchant_rating INTEGER, merchant_rating_comment TEXT, batch_id TEXT, batch_sequence INTEGER, surge_multiplier REAL NOT NULL DEFAULT 1.0, source TEXT NOT NULL DEFAULT 'portal', requires_age_verification INTEGER NOT NULL DEFAULT 0, age_verified_at TEXT, age_verification_method TEXT, temperature_requirement TEXT NOT NULL DEFAULT 'ambient', engaged_minutes REAL, deleted_at TEXT, deleted_by TEXT, cancelled_at TEXT, cancelled_by TEXT, cancel_reason TEXT, refund_status TEXT NOT NULL DEFAULT 'none', refund_amount_cents INTEGER, refund_note TEXT, refunded_at TEXT, sla_breach_alerted_at TEXT, pii_purged_at TEXT, proof_purged_at TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "merchant_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "zone_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "pickup_address",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "pickup_lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "pickup_lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "dropoff_address",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "dropoff_lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "dropoff_lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "customer_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "customer_phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "customer_email",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "delivery_instructions",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "package_weight_kg",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "service_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'SAME_DAY'",
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'PENDING'",
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "price_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "courier_fee_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "platform_fee_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "proof_of_delivery_url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 21,
+        "name": "customer_rating",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 22,
+        "name": "customer_comment",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 23,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 24,
+        "name": "assigned_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 25,
+        "name": "picked_up_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 26,
+        "name": "delivered_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 27,
+        "name": "window_start",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 28,
+        "name": "window_end",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 29,
+        "name": "distance_km",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 30,
+        "name": "distance_source",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 31,
+        "name": "eta_minutes",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 32,
+        "name": "dispatch_mode",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'auto'",
+        "pk": 0
+      },
+      {
+        "cid": 33,
+        "name": "failure_reason",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 34,
+        "name": "returned_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 35,
+        "name": "arrived_at_pickup",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 36,
+        "name": "merchant_rating",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 37,
+        "name": "merchant_rating_comment",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 38,
+        "name": "batch_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 39,
+        "name": "batch_sequence",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 40,
+        "name": "surge_multiplier",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": "1.0",
+        "pk": 0
+      },
+      {
+        "cid": 41,
+        "name": "source",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'portal'",
+        "pk": 0
+      },
+      {
+        "cid": 42,
+        "name": "requires_age_verification",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 43,
+        "name": "age_verified_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 44,
+        "name": "age_verification_method",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 45,
+        "name": "temperature_requirement",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'ambient'",
+        "pk": 0
+      },
+      {
+        "cid": 46,
+        "name": "engaged_minutes",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 47,
+        "name": "deleted_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 48,
+        "name": "deleted_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 49,
+        "name": "cancelled_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 50,
+        "name": "cancelled_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 51,
+        "name": "cancel_reason",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 52,
+        "name": "refund_status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'none'",
+        "pk": 0
+      },
+      {
+        "cid": 53,
+        "name": "refund_amount_cents",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 54,
+        "name": "refund_note",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 55,
+        "name": "refunded_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 56,
+        "name": "sla_breach_alerted_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 57,
+        "name": "pii_purged_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 58,
+        "name": "proof_purged_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "order_events",
+    "sql": "CREATE TABLE order_events (\n  id TEXT PRIMARY KEY,\n  order_id TEXT NOT NULL REFERENCES orders(id),\n  type TEXT NOT NULL,\n  payload TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "payload",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "payouts",
+    "sql": "CREATE TABLE payouts (\n  id TEXT PRIMARY KEY,\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  period_start TEXT NOT NULL,\n  period_end TEXT NOT NULL,\n  amount_cents INTEGER NOT NULL,\n  status TEXT NOT NULL DEFAULT 'pending',\n  tax_doc_url TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "period_start",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "period_end",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "amount_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "tax_doc_url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "documents",
+    "sql": "CREATE TABLE documents (\n  id TEXT PRIMARY KEY,\n  owner_type TEXT NOT NULL,   -- 'courier' | 'merchant'\n  owner_id TEXT NOT NULL,\n  doc_type TEXT NOT NULL,     -- 'drivers_license' | 'insurance' | 'vehicle_registration' | 'business_licence' | 'void_cheque'\n  url TEXT NOT NULL,\n  original_name TEXT,\n  status TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | rejected\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, reviewed_at TEXT, file_purged_at TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "owner_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "owner_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "doc_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "url",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "original_name",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'pending'",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "reviewed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "file_purged_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "audit_log",
+    "sql": "CREATE TABLE audit_log (\n  id TEXT PRIMARY KEY,\n  actor_user_id TEXT,\n  action TEXT NOT NULL,\n  target_type TEXT,\n  target_id TEXT,\n  notes TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "actor_user_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "action",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "target_type",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "target_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "notes",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "courier_location_pings",
+    "sql": "CREATE TABLE courier_location_pings (\n  id TEXT PRIMARY KEY,\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  order_id TEXT REFERENCES orders(id),\n  lat REAL NOT NULL,\n  lng REAL NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "lat",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "lng",
+        "type": "REAL",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "disputes",
+    "sql": "CREATE TABLE disputes (\n  id TEXT PRIMARY KEY,\n  order_id TEXT NOT NULL REFERENCES orders(id),\n  raised_by TEXT NOT NULL,\n  reason TEXT NOT NULL,\n  status TEXT NOT NULL DEFAULT 'open',\n  resolution TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n, order_amount_cents INTEGER, resolution_amount_cents INTEGER, resolved_by TEXT, resolved_at TEXT)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "raised_by",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "reason",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'open'",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "resolution",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "order_amount_cents",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "resolution_amount_cents",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "resolved_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "resolved_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "support_tickets",
+    "sql": "CREATE TABLE support_tickets (\n  id TEXT PRIMARY KEY,\n  reference TEXT NOT NULL,\n  opened_by_role TEXT NOT NULL,        -- merchant | courier | customer | admin\n  opened_by_user_id TEXT,\n  contact_email TEXT,\n  order_id TEXT REFERENCES orders(id),\n  category TEXT NOT NULL,              -- delivery | payment | account | app | other\n  subject TEXT NOT NULL,\n  priority TEXT NOT NULL DEFAULT 'normal',\n  status TEXT NOT NULL DEFAULT 'open', -- open | pending | resolved | closed\n  assigned_to TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n  resolved_at TEXT\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "reference",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "opened_by_role",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "opened_by_user_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "contact_email",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "category",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "subject",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "priority",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'normal'",
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'open'",
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "assigned_to",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "updated_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "resolved_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "ticket_messages",
+    "sql": "CREATE TABLE ticket_messages (\n  id TEXT PRIMARY KEY,\n  ticket_id TEXT NOT NULL REFERENCES support_tickets(id),\n  sender_role TEXT NOT NULL,\n  sender_user_id TEXT,\n  body TEXT NOT NULL,\n  internal INTEGER NOT NULL DEFAULT 0,  -- internal notes aren't shown to the requester\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "ticket_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "sender_role",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "sender_user_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "internal",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "fraud_flags",
+    "sql": "CREATE TABLE fraud_flags (\n  id TEXT PRIMARY KEY,\n  subject_type TEXT NOT NULL,          -- courier | merchant | order\n  subject_id TEXT NOT NULL,\n  order_id TEXT,\n  rule TEXT NOT NULL,                  -- impossible_speed | duplicate_pod | excessive_cancels | instant_delivery\n  severity TEXT NOT NULL DEFAULT 'medium',\n  detail TEXT,\n  status TEXT NOT NULL DEFAULT 'open', -- open | reviewed | dismissed\n  reviewed_by TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "subject_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "subject_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "rule",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "severity",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'medium'",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "detail",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'open'",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "reviewed_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "batches",
+    "sql": "CREATE TABLE batches (\n  id TEXT PRIMARY KEY,\n  courier_id TEXT REFERENCES courier_profiles(id),\n  zone_id TEXT REFERENCES zones(id),\n  status TEXT NOT NULL DEFAULT 'open',   -- open | offered | assigned | completed\n  stop_count INTEGER NOT NULL DEFAULT 0,\n  total_km REAL,\n  total_courier_fee_cents INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  assigned_at TEXT\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "zone_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'open'",
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "stop_count",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "total_km",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "total_courier_fee_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "assigned_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "api_keys",
+    "sql": "CREATE TABLE api_keys (\n  id TEXT PRIMARY KEY,\n  merchant_id TEXT NOT NULL REFERENCES merchant_profiles(id),\n  name TEXT NOT NULL,\n  key_prefix TEXT NOT NULL,\n  key_hash TEXT NOT NULL,\n  webhook_url TEXT,\n  last_used_at TEXT,\n  revoked_at TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "merchant_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "key_prefix",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "key_hash",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "webhook_url",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "last_used_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "revoked_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "webhook_deliveries",
+    "sql": "CREATE TABLE webhook_deliveries (\n  id TEXT PRIMARY KEY,\n  merchant_id TEXT NOT NULL,\n  order_id TEXT,\n  event TEXT NOT NULL,\n  url TEXT NOT NULL,\n  status TEXT NOT NULL,\n  response_code INTEGER,\n  error TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "merchant_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "event",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "url",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "response_code",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "error",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "recurring_orders",
+    "sql": "CREATE TABLE recurring_orders (\n  id TEXT PRIMARY KEY,\n  merchant_id TEXT NOT NULL REFERENCES merchant_profiles(id),\n  zone_id TEXT NOT NULL REFERENCES zones(id),\n  label TEXT NOT NULL,\n  pickup_address TEXT NOT NULL,\n  pickup_lat REAL, pickup_lng REAL,\n  dropoff_address TEXT NOT NULL,\n  dropoff_lat REAL, dropoff_lng REAL,\n  customer_name TEXT NOT NULL,\n  customer_phone TEXT,\n  customer_email TEXT,\n  delivery_instructions TEXT,\n  service_type TEXT NOT NULL DEFAULT 'SAME_DAY',\n  days_of_week TEXT NOT NULL,            -- e.g. \"1,3,5\" (0=Sun)\n  window_hour_start INTEGER,\n  window_hour_end INTEGER,\n  active INTEGER NOT NULL DEFAULT 1,\n  last_generated_date TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "merchant_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "zone_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "label",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "pickup_address",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "pickup_lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "pickup_lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "dropoff_address",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "dropoff_lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "dropoff_lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "customer_name",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 11,
+        "name": "customer_phone",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 12,
+        "name": "customer_email",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 13,
+        "name": "delivery_instructions",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 14,
+        "name": "service_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'SAME_DAY'",
+        "pk": 0
+      },
+      {
+        "cid": 15,
+        "name": "days_of_week",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 16,
+        "name": "window_hour_start",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 17,
+        "name": "window_hour_end",
+        "type": "INTEGER",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 18,
+        "name": "active",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "1",
+        "pk": 0
+      },
+      {
+        "cid": 19,
+        "name": "last_generated_date",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 20,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "challenges",
+    "sql": "CREATE TABLE challenges (\n  id TEXT PRIMARY KEY,\n  title TEXT NOT NULL,\n  description TEXT,\n  target_deliveries INTEGER NOT NULL,\n  bonus_cents INTEGER NOT NULL,\n  starts_at TEXT NOT NULL,\n  ends_at TEXT NOT NULL,\n  min_tier TEXT NOT NULL DEFAULT 'STARTER',\n  active INTEGER NOT NULL DEFAULT 1,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "title",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "description",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "target_deliveries",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "bonus_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "starts_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "ends_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "min_tier",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'STARTER'",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "active",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "1",
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "challenge_claims",
+    "sql": "CREATE TABLE challenge_claims (\n  id TEXT PRIMARY KEY,\n  challenge_id TEXT NOT NULL REFERENCES challenges(id),\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  bonus_cents INTEGER NOT NULL,\n  claimed_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "challenge_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "bonus_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "claimed_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "payout_requests",
+    "sql": "CREATE TABLE payout_requests (\n  id TEXT PRIMARY KEY,\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  amount_cents INTEGER NOT NULL,\n  fee_cents INTEGER NOT NULL DEFAULT 0,\n  method TEXT NOT NULL,                   -- instant | weekly\n  status TEXT NOT NULL DEFAULT 'requested', -- requested | approved | paid | rejected\n  note TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  processed_at TEXT\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "amount_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "fee_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "method",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'requested'",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "note",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "processed_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "notifications",
+    "sql": "CREATE TABLE notifications (\n  id TEXT PRIMARY KEY,\n  order_id TEXT REFERENCES orders(id),\n  channel TEXT NOT NULL,            -- sms | email\n  recipient TEXT NOT NULL,\n  template TEXT NOT NULL,\n  subject TEXT,\n  body TEXT NOT NULL,\n  status TEXT NOT NULL,             -- sent | logged | failed\n  provider TEXT,                    -- twilio | resend | console\n  error TEXT,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "channel",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "recipient",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "template",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "subject",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "provider",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "error",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 10,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "messages",
+    "sql": "CREATE TABLE messages (\n  id TEXT PRIMARY KEY,\n  order_id TEXT NOT NULL REFERENCES orders(id),\n  sender_role TEXT NOT NULL,        -- customer | courier | merchant | admin\n  sender_user_id TEXT,              -- null for the customer (no account)\n  body TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "sender_role",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "sender_user_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "body",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "offers",
+    "sql": "CREATE TABLE offers (\n  id TEXT PRIMARY KEY,\n  order_id TEXT NOT NULL REFERENCES orders(id),\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  status TEXT NOT NULL DEFAULT 'offered', -- offered | accepted | declined | expired\n  expires_at TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  responded_at TEXT\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'offered'",
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "expires_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "responded_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "push_subscriptions",
+    "sql": "CREATE TABLE push_subscriptions (\n  id TEXT PRIMARY KEY,\n  subject_type TEXT NOT NULL,   -- user | order\n  subject_id TEXT NOT NULL,\n  endpoint TEXT NOT NULL UNIQUE,\n  p256dh TEXT NOT NULL,\n  auth TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "subject_type",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "subject_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "endpoint",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "p256dh",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "auth",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "customer_addresses",
+    "sql": "CREATE TABLE customer_addresses (\n  id TEXT PRIMARY KEY,\n  user_id TEXT NOT NULL REFERENCES users(id),\n  label TEXT NOT NULL DEFAULT 'Home',\n  address TEXT NOT NULL,\n  lat REAL,\n  lng REAL,\n  is_default INTEGER NOT NULL DEFAULT 0,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "label",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'Home'",
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "address",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "is_default",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "loyalty_accounts",
+    "sql": "CREATE TABLE loyalty_accounts (\n  user_id TEXT PRIMARY KEY REFERENCES users(id),\n  points INTEGER NOT NULL DEFAULT 0,\n  referral_code TEXT NOT NULL UNIQUE,\n  referred_by_user_id TEXT REFERENCES users(id),\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "points",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": "0",
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "referral_code",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "referred_by_user_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "loyalty_transactions",
+    "sql": "CREATE TABLE loyalty_transactions (\n  id TEXT PRIMARY KEY,\n  user_id TEXT NOT NULL REFERENCES users(id),\n  order_id TEXT REFERENCES orders(id),\n  points INTEGER NOT NULL,       -- positive = earned, negative = redeemed\n  reason TEXT NOT NULL,          -- order_delivered | referral_bonus | referred_signup_bonus | redeemed\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "points",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "reason",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "surge_alerts",
+    "sql": "CREATE TABLE surge_alerts (\n  id TEXT PRIMARY KEY,\n  zone_id TEXT NOT NULL REFERENCES zones(id),\n  waiting_count INTEGER NOT NULL,\n  bonus_cents INTEGER NOT NULL,\n  expires_at TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "zone_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "waiting_count",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "bonus_cents",
+        "type": "INTEGER",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "expires_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "safety_incidents",
+    "sql": "CREATE TABLE safety_incidents (\n  id TEXT PRIMARY KEY,\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  order_id TEXT REFERENCES orders(id),\n  lat REAL,\n  lng REAL,\n  note TEXT,\n  status TEXT NOT NULL DEFAULT 'open',   -- open | acknowledged | resolved\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  resolved_at TEXT,\n  resolved_by TEXT\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "lat",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "lng",
+        "type": "REAL",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 5,
+        "name": "note",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 6,
+        "name": "status",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "'open'",
+        "pk": 0
+      },
+      {
+        "cid": 7,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      },
+      {
+        "cid": 8,
+        "name": "resolved_at",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 9,
+        "name": "resolved_by",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "location_shares",
+    "sql": "CREATE TABLE location_shares (\n  id TEXT PRIMARY KEY,\n  token TEXT NOT NULL UNIQUE,\n  courier_id TEXT NOT NULL REFERENCES courier_profiles(id),\n  expires_at TEXT NOT NULL,\n  created_at TEXT NOT NULL DEFAULT (datetime('now'))\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "id",
+        "type": "TEXT",
+        "notnull": 0,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "token",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 2,
+        "name": "courier_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 3,
+        "name": "expires_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      },
+      {
+        "cid": 4,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "message_read_state",
+    "sql": "CREATE TABLE message_read_state (\n  order_id TEXT NOT NULL REFERENCES orders(id),\n  role TEXT NOT NULL,\n  last_read_at TEXT NOT NULL,\n  PRIMARY KEY (order_id, role)\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "role",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 2
+      },
+      {
+        "cid": 2,
+        "name": "last_read_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "table",
+    "name": "customer_order_links",
+    "sql": "CREATE TABLE customer_order_links (\n  user_id TEXT NOT NULL REFERENCES users(id),\n  order_id TEXT NOT NULL REFERENCES orders(id),\n  created_at TEXT NOT NULL DEFAULT (datetime('now')),\n  PRIMARY KEY (user_id, order_id)\n)",
+    "columns": [
+      {
+        "cid": 0,
+        "name": "user_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 1
+      },
+      {
+        "cid": 1,
+        "name": "order_id",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": null,
+        "pk": 2
+      },
+      {
+        "cid": 2,
+        "name": "created_at",
+        "type": "TEXT",
+        "notnull": 1,
+        "dflt_value": "datetime('now')",
+        "pk": 0
+      }
+    ]
+  },
+  {
+    "type": "index",
+    "name": "idx_orders_merchant",
+    "sql": "CREATE INDEX idx_orders_merchant ON orders(merchant_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_orders_courier",
+    "sql": "CREATE INDEX idx_orders_courier ON orders(courier_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_orders_status",
+    "sql": "CREATE INDEX idx_orders_status ON orders(status)"
+  },
+  {
+    "type": "index",
+    "name": "idx_documents_owner",
+    "sql": "CREATE INDEX idx_documents_owner ON documents(owner_type, owner_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_audit_target",
+    "sql": "CREATE INDEX idx_audit_target ON audit_log(target_type, target_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_pings_courier",
+    "sql": "CREATE INDEX idx_pings_courier ON courier_location_pings(courier_id, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_tickets_status",
+    "sql": "CREATE INDEX idx_tickets_status ON support_tickets(status, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_ticket_messages",
+    "sql": "CREATE INDEX idx_ticket_messages ON ticket_messages(ticket_id, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_fraud_status",
+    "sql": "CREATE INDEX idx_fraud_status ON fraud_flags(status, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_batches_status",
+    "sql": "CREATE INDEX idx_batches_status ON batches(status)"
+  },
+  {
+    "type": "index",
+    "name": "idx_apikeys_merchant",
+    "sql": "CREATE INDEX idx_apikeys_merchant ON api_keys(merchant_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_recurring_merchant",
+    "sql": "CREATE INDEX idx_recurring_merchant ON recurring_orders(merchant_id, active)"
+  },
+  {
+    "type": "index",
+    "name": "idx_claim_unique",
+    "sql": "CREATE UNIQUE INDEX idx_claim_unique ON challenge_claims(challenge_id, courier_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_payout_courier",
+    "sql": "CREATE INDEX idx_payout_courier ON payout_requests(courier_id, status)"
+  },
+  {
+    "type": "index",
+    "name": "idx_notifications_order",
+    "sql": "CREATE INDEX idx_notifications_order ON notifications(order_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_messages_order",
+    "sql": "CREATE INDEX idx_messages_order ON messages(order_id, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_offers_order",
+    "sql": "CREATE INDEX idx_offers_order ON offers(order_id, status)"
+  },
+  {
+    "type": "index",
+    "name": "idx_offers_courier",
+    "sql": "CREATE INDEX idx_offers_courier ON offers(courier_id, status)"
+  },
+  {
+    "type": "index",
+    "name": "idx_push_subject",
+    "sql": "CREATE INDEX idx_push_subject ON push_subscriptions(subject_type, subject_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_customer_addresses_user",
+    "sql": "CREATE INDEX idx_customer_addresses_user ON customer_addresses(user_id)"
+  },
+  {
+    "type": "index",
+    "name": "idx_loyalty_tx_user",
+    "sql": "CREATE INDEX idx_loyalty_tx_user ON loyalty_transactions(user_id, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_surge_alerts_zone",
+    "sql": "CREATE INDEX idx_surge_alerts_zone ON surge_alerts(zone_id, expires_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_safety_incidents_status",
+    "sql": "CREATE INDEX idx_safety_incidents_status ON safety_incidents(status, created_at)"
+  },
+  {
+    "type": "index",
+    "name": "idx_location_shares_token",
+    "sql": "CREATE INDEX idx_location_shares_token ON location_shares(token)"
+  },
+  {
+    "type": "index",
+    "name": "idx_customer_order_links_order",
+    "sql": "CREATE INDEX idx_customer_order_links_order ON customer_order_links(order_id)"
+  }
+]

@@ -9,8 +9,8 @@ export default async function DriverDemandPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
-  const blocked = courierBlockReason(courier);
+  const courier = await getCourierProfileByUserId(user.id);
+  const blocked = await courierBlockReason(courier);
   if (blocked) {
     return (
       <div className="rounded-xl border border-warn/30 bg-warn-soft p-4 text-sm text-warn">
@@ -19,10 +19,10 @@ export default async function DriverDemandPage() {
     );
   }
 
-  const zones = demandHeatmap(24);
-  const byHour = demandByHour(7);
+  const zones = await demandHeatmap(24);
+  const byHour = await demandByHour(7);
   const peak = Math.max(1, ...byHour.map((h) => h.orderCount));
-  const surgeAlerts = listActiveSurgeAlerts();
+  const surgeAlerts = await listActiveSurgeAlerts();
 
   return (
     <div className="space-y-8">

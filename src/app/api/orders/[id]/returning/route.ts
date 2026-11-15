@@ -26,20 +26,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 400 });
 
-  const ok = markOrderReturning(params.id, courier.id, parsed.data.reason);
+  const ok = await markOrderReturning(params.id, courier.id, parsed.data.reason);
   if (!ok) return NextResponse.json({ error: "Order not found or not in a returnable state" }, { status: 404 });
 
   // The merchant needs to know their parcel is coming back, and why.
   // Repeated failures are a trust signal worth reviewing.
-  checkCancelRate(courier.id);
+  await checkCancelRate(courier.id);
 
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (order) {
-    const merchant = getMerchantProfileById(order.merchantId);
-    const merchantUser = merchant ? findUserById(merchant.userId) : null;
+    const merchant = await getMerchantProfileById(order.merchantId);
+    const merchantUser = merchant ? await findUserById(merchant.userId) : null;
     await notifyReturning(order as any, merchantUser?.email ?? null, parsed.data.reason);
   }
 

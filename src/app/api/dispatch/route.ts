@@ -17,7 +17,7 @@ export async function POST() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
-  const result = runDispatchTick();
+  const result = await runDispatchTick();
   if (user.role === "ADMIN") return NextResponse.json(result);
   return NextResponse.json({ ok: true });
 }

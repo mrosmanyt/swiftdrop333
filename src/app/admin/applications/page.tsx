@@ -8,8 +8,8 @@ export default async function AdminApplicationsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const merchants = listMerchantsByKyb("pending");
-  const couriers = listCouriersByApproval("pending");
+  const merchants = await listMerchantsByKyb("pending");
+  const couriers = await listCouriersByApproval("pending");
 
   return (
     <div className="space-y-8">
@@ -23,7 +23,7 @@ export default async function AdminApplicationsPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Businesses ({merchants.length})</h2>
-        {merchants.map((m) => (
+        {await Promise.all(merchants.map(async (m) => (
           <ApplicationReview
             key={m!.id}
             kind="merchant"
@@ -33,20 +33,22 @@ export default async function AdminApplicationsPage() {
             details={[
               { label: "Contact", value: m!.contactName ?? "—" },
               { label: "Phone", value: m!.businessPhone ?? "—" },
+              { label: "City", value: m!.businessCity ?? "—" },
               { label: "Pickup address", value: m!.businessAddress ?? "—" },
               { label: "Business number", value: m!.businessNumber ?? "—" },
+              { label: "Daily volume", value: m!.dailyVolume ? `${m!.dailyVolume} parcels/day` : "—" },
               { label: "Website", value: m!.website ?? "—" },
               { label: "Applied", value: new Date(m!.createdAt).toLocaleDateString() },
             ]}
-            documents={listDocuments("merchant", m!.id)}
+            documents={await listDocuments("merchant", m!.id)}
           />
-        ))}
+        )))}
         {!merchants.length && <p className="text-sm text-fg-subtle">No business applications waiting.</p>}
       </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Couriers ({couriers.length})</h2>
-        {couriers.map((c) => (
+        {await Promise.all(couriers.map(async (c) => (
           <ApplicationReview
             key={c!.id}
             kind="courier"
@@ -58,16 +60,16 @@ export default async function AdminApplicationsPage() {
               { label: "Vehicle", value: c!.vehicleType },
               { label: "Make/model", value: c!.vehicleMakeModel ?? "—" },
               { label: "Plate", value: c!.vehiclePlate ?? "—" },
-              { label: "Licence #", value: c!.licenseNumber ?? "—" },
+              { label: "Licence # (last 4)", value: c!.licenseNumber ?? "—" },
               { label: "Licence expiry", value: c!.licenseExpiry ?? "—" },
               { label: "Insurer", value: c!.insuranceProvider ?? "—" },
-              { label: "Policy #", value: c!.insurancePolicyNumber ?? "—" },
+              { label: "Policy # (last 4)", value: c!.insurancePolicyNumber ?? "—" },
               { label: "Background check", value: c!.backgroundCheckStatus },
               { label: "Applied", value: new Date(c!.createdAt).toLocaleDateString() },
             ]}
-            documents={listDocuments("courier", c!.id)}
+            documents={await listDocuments("courier", c!.id)}
           />
-        ))}
+        )))}
         {!couriers.length && <p className="text-sm text-fg-subtle">No courier applications waiting.</p>}
       </section>
     </div>

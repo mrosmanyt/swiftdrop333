@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+const objects = JSON.parse(fs.readFileSync('migrations/sqlite-schema.json', 'utf8'));
+const tables = objects.filter(o => o.type === 'table');
+const ordered = [];
+const remaining = new Map(tables.map(t => [t.name, t]));
+while (remaining.size) {
+  const ready = [...remaining.values()].filter(t => [...t.sql.matchAll(/REFERENCES\s+(\w+)/g)].every(m => m[1] === t.name || !remaining.has(m[1])));
+  if (!ready.length) throw new Error('Circular foreign keys require explicit deferred schema ordering');
+  for (const table of ready) { ordered.push(table); remaining.delete(table.name); }
+}
+const convert = sql => sql
+  .replace(/datetime\('now'\)/g, `to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')`)
+  .replace(/\bREAL\b/g, 'DOUBLE PRECISION');
+const statements = [...ordered, ...objects.filter(o => o.type === 'index')].map(o => convert(o.sql) + ';');
+const sql = '-- Initial PostgreSQL schema. Review and validate against PostgreSQL before applying.\n-- Text timestamps and integer flags intentionally preserve the existing application contract.\n-- No user records are included. Apply once to an empty application schema.\nBEGIN;\n\n' + statements.join('\n\n') + '\n\nCOMMIT;\n';
+if (/\b(PRAGMA|AUTOINCREMENT|datetime\s*\()/i.test(sql)) throw new Error('Unsupported SQLite syntax remains');
+fs.writeFileSync('migrations/001-postgres.sql',sql);
+console.log(`Generated ${ordered.length} tables and ${objects.filter(o => o.type === 'index').length} indexes`);

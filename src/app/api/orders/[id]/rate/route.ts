@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const ok = submitOrderRating(params.id, parsed.data.rating, parsed.data.comment);
+  const ok = await submitOrderRating(params.id, parsed.data.rating, parsed.data.comment);
   if (!ok) {
     return NextResponse.json(
       { error: "Order not found, not yet delivered, or already rated." },

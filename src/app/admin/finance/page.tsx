@@ -8,7 +8,7 @@ export default async function AdminFinancePage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const summary = financialSummary(30);
+  const summary = await financialSummary(30);
   const peak = Math.max(1, ...summary.dailySeries.map((d: any) => d.grossCents));
 
   return (

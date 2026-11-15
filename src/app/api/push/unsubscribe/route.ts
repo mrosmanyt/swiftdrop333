@@ -11,6 +11,6 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  removePushSubscription(parsed.data.endpoint);
+  await removePushSubscription(parsed.data.endpoint);
   return NextResponse.json({ ok: true });
 }

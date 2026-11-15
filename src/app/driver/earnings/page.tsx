@@ -17,18 +17,18 @@ export default async function DriverEarningsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
+  const courier = await getCourierProfileByUserId(user.id);
   if (!courier) return <p>No courier profile found.</p>;
 
-  const delivered = listDeliveredOrdersForCourier(courier.id, 200);
-  const stats = computeCourierStats14d(courier.id);
+  const delivered = await listDeliveredOrdersForCourier(courier.id, 200);
+  const stats = await computeCourierStats14d(courier.id);
   const progress = nextTierProgress(stats);
   // Keep the stored tier honest with what the last 14 days actually earned,
   // so the badge and the "x more to reach y" line can never disagree.
-  const tier = refreshCourierTier(courier.id);
-  const summary = courierEarningsSummary(courier.id);
-  const claims = listChallengeClaims(courier.id);
-  const payouts = listPayoutRequests(courier.id);
+  const tier = await refreshCourierTier(courier.id);
+  const summary = await courierEarningsSummary(courier.id);
+  const claims = await listChallengeClaims(courier.id);
+  const payouts = await listPayoutRequests(courier.id);
 
   return (
     <div className="space-y-6">

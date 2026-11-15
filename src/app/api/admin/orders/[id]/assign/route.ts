@@ -14,13 +14,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileById(parsed.data.courierId);
+  const courier = await getCourierProfileById(parsed.data.courierId);
   if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
   if (courier.approvalStatus !== "approved") {
     return NextResponse.json({ error: "That courier isn't approved" }, { status: 400 });
   }
 
-  const ok = adminAssignOrder(params.id, courier.id, auth.id);
+  const ok = await adminAssignOrder(params.id, courier.id, auth.id);
   if (!ok) return NextResponse.json({ error: "Order can't be assigned in its current state" }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

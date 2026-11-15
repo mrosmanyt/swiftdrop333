@@ -7,9 +7,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const ok = resolveSafetyIncident(params.id, auth.id);
+  const ok = await resolveSafetyIncident(params.id, auth.id);
   if (!ok) return NextResponse.json({ error: "Incident not found" }, { status: 404 });
 
-  writeAudit(auth.id, "safety_incident_resolved", "safety_incident", params.id);
+  await writeAudit(auth.id, "safety_incident_resolved", "safety_incident", params.id);
   return NextResponse.json({ ok: true });
 }

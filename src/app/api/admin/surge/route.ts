@@ -13,7 +13,7 @@ const schema = z.object({
 export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
-  return NextResponse.json({ zones: listAllZones() });
+  return NextResponse.json({ zones: await listAllZones() });
 }
 
 /**
@@ -28,6 +28,6 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  setZoneSurge(parsed.data.zoneId, parsed.data.multiplier, parsed.data.note ?? null, auth.id);
+  await setZoneSurge(parsed.data.zoneId, parsed.data.multiplier, parsed.data.note ?? null, auth.id);
   return NextResponse.json({ ok: true });
 }

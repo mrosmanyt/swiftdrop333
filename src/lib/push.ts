@@ -50,8 +50,8 @@ export interface PushPayload {
 }
 
 /** Save (or update) a subscription for a signed-in user or a guest order. */
-export function savePushSubscription(subjectType: PushSubjectType, subjectId: string, sub: SubscriptionInput) {
-  db.prepare(
+export async function savePushSubscription(subjectType: PushSubjectType, subjectId: string, sub: SubscriptionInput) {
+  await db.prepare(
     `INSERT INTO push_subscriptions (id, subject_type, subject_id, endpoint, p256dh, auth, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(endpoint) DO UPDATE SET
@@ -62,12 +62,12 @@ export function savePushSubscription(subjectType: PushSubjectType, subjectId: st
   ).run(randomUUID(), subjectType, subjectId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, new Date().toISOString());
 }
 
-export function removePushSubscription(endpoint: string) {
-  db.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).run(endpoint);
+export async function removePushSubscription(endpoint: string) {
+  await db.prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`).run(endpoint);
 }
 
-function subscriptionsFor(subjectType: PushSubjectType, subjectId: string): SubscriptionRow[] {
-  return db
+async function subscriptionsFor(subjectType: PushSubjectType, subjectId: string): Promise<SubscriptionRow[]> {
+  return await db
     .prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE subject_type = ? AND subject_id = ?`)
     .all(subjectType, subjectId) as unknown as SubscriptionRow[];
 }
@@ -81,21 +81,21 @@ async function deliver(row: SubscriptionRow, payload: PushPayload) {
   } catch (e: any) {
     // 404/410 means the browser dropped this subscription (uninstalled,
     // site data cleared) — the push service is telling us to stop trying.
-    if (e?.statusCode === 404 || e?.statusCode === 410) removePushSubscription(row.endpoint);
+    if (e?.statusCode === 404 || e?.statusCode === 410) await removePushSubscription(row.endpoint);
   }
 }
 
 /** Push to every device a signed-in user (driver/merchant/admin) has opted in on. */
 export async function pushToUser(userId: string, payload: PushPayload) {
   if (!ensureConfigured() || !userId) return;
-  const rows = subscriptionsFor("user", userId);
+  const rows = await subscriptionsFor("user", userId);
   await Promise.all(rows.map((r) => deliver(r, payload)));
 }
 
 /** Push to whoever opted in on this specific order's tracking page (the customer). */
 export async function pushToOrder(orderId: string, payload: PushPayload) {
   if (!ensureConfigured() || !orderId) return;
-  const rows = subscriptionsFor("order", orderId);
+  const rows = await subscriptionsFor("order", orderId);
   await Promise.all(rows.map((r) => deliver(r, payload)));
 }
 

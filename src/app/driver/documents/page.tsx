@@ -8,12 +8,12 @@ export default async function DriverDocumentsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
+  const courier = await getCourierProfileByUserId(user.id);
   if (!courier) return <p>No courier profile found.</p>;
 
-  const docs = listDocuments("courier", courier.id);
+  const docs = await listDocuments("courier", courier.id);
   const byType = (t: string) => docs.find((d) => d.docType === t) ?? null;
-  const blockReason = courierBlockReason(courier);
+  const blockReason = await courierBlockReason(courier);
   const motorised = courier.vehicleType !== "BIKE";
 
   return (

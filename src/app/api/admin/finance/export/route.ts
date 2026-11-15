@@ -9,7 +9,7 @@ export async function GET() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
 
-  const summary = financialSummary(30);
+  const summary = await financialSummary(30);
   const csv = toCsv(
     summary.dailySeries.map((d: any) => ({
       date: d.date,

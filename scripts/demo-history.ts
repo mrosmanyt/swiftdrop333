@@ -43,23 +43,23 @@ const CUSTOMERS = [
 
 const SERVICE_TYPES = ["SAME_DAY", "SAME_DAY", "SAME_DAY", "NEXT_DAY", "DIRECT", "BATCH"];
 
-export function seedDemoHistory() {
-  const courier = db
+export async function seedDemoHistory() {
+  const courier = await db
     .prepare(
       `SELECT c.id FROM courier_profiles c
        JOIN users u ON u.id = c.user_id WHERE u.email = 'courier@example.com'`
     )
     .get() as any;
-  const merchant = db
+  const merchant = await db
     .prepare(
       `SELECT m.id, m.business_address FROM merchant_profiles m
        JOIN users u ON u.id = m.user_id WHERE u.email = 'merchant@example.com'`
     )
     .get() as any;
-  const zone = db.prepare(`SELECT id FROM zones ORDER BY name LIMIT 1`).get() as any;
+  const zone = await db.prepare(`SELECT id FROM zones ORDER BY name LIMIT 1`).get() as any;
   if (!courier || !merchant || !zone) return;
 
-  const existing = db
+  const existing = await db
     .prepare(`SELECT COUNT(*) as c FROM orders WHERE courier_id = ? AND status = 'DELIVERED'`)
     .get(courier.id) as any;
   if ((existing?.c ?? 0) > 3) return; // already has a history
@@ -99,7 +99,7 @@ export function seedDemoHistory() {
       const pickedUp = new Date(assigned.getTime() + (4 + rng() * 7) * 60000);
       const delivered = new Date(pickedUp.getTime() + (9 + rng() * 18) * 60000);
 
-      insertOrder.run(
+      await insertOrder.run(
         uid(), merchant.id, courier.id, zone.id,
         pickup, 43.6503, -79.3889,
         addr, lat, lng,
@@ -118,7 +118,7 @@ export function seedDemoHistory() {
   // One completed weekly payout, so "available to cash out" is this week's
   // work rather than everything the courier has ever earned.
   const paidOutCents = 12800;
-  db.prepare(
+  await db.prepare(
     `INSERT INTO payout_requests (id, courier_id, amount_cents, method, status, created_at, processed_at)
      VALUES (?,?,?,'weekly','paid',?,?)`
   ).run(
@@ -130,17 +130,17 @@ export function seedDemoHistory() {
   console.log(`  ✓ Demo history: ${made} completed deliveries over the last 14 days.`);
 }
 
-export function seedDemoMerchantTools() {
-  const merchant = db
+export async function seedDemoMerchantTools() {
+  const merchant = await db
     .prepare(
       `SELECT m.id FROM merchant_profiles m
        JOIN users u ON u.id = m.user_id WHERE u.email = 'merchant@example.com'`
     )
     .get() as any;
-  const zone = db.prepare(`SELECT id FROM zones ORDER BY name LIMIT 1`).get() as any;
+  const zone = await db.prepare(`SELECT id FROM zones ORDER BY name LIMIT 1`).get() as any;
   if (!merchant || !zone) return;
 
-  const keyCount = db
+  const keyCount = await db
     .prepare(`SELECT COUNT(*) as c FROM api_keys WHERE merchant_id = ?`)
     .get(merchant.id) as any;
   if ((keyCount?.c ?? 0) > 0) return;
@@ -153,12 +153,12 @@ export function seedDemoMerchantTools() {
      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?)`
   );
   const today = new Date().toISOString().slice(0, 10);
-  recurring.run(
+  await recurring.run(
     uid(), merchant.id, zone.id, "Weekday café restock",
     "123 Queen St W, Toronto, ON", "80 Spadina Ave, Toronto, ON",
     "Rosewood Café", "+1 416 555 0142", "SAME_DAY", "1,2,3,4,5", 9, 11, today
   );
-  recurring.run(
+  await recurring.run(
     uid(), merchant.id, zone.id, "Saturday market run",
     "123 Queen St W, Toronto, ON", "390 Bathurst St, Toronto, ON",
     "St. Andrew Market", "+1 647 555 0119", "BATCH", "6", 7, 9, today
@@ -170,13 +170,13 @@ export function seedDemoMerchantTools() {
     `INSERT INTO api_keys (id, merchant_id, name, key_prefix, key_hash, webhook_url, last_used_at)
      VALUES (?,?,?,?,?,?,?)`
   );
-  key.run(
+  await key.run(
     uid(), merchant.id, "Shopify store", "sk_live_7Qa4",
     crypto.randomBytes(24).toString("hex"),
     "https://cornerbakery.ca/hooks/swiftdrop",
     iso(new Date(Date.now() - 3600000))
   );
-  key.run(
+  await key.run(
     uid(), merchant.id, "Warehouse script", "sk_live_M2xD",
     crypto.randomBytes(24).toString("hex"),
     "https://ops.cornerbakery.ca/api/delivery-events",
@@ -194,7 +194,7 @@ export function seedDemoMerchantTools() {
     ["order.created", "https://ops.cornerbakery.ca/api/delivery-events", 202, 82],
   ];
   for (const [event, url, code, minsAgo] of events) {
-    hook.run(uid(), merchant.id, event, url, code, iso(new Date(Date.now() - minsAgo * 60000)));
+    await hook.run(uid(), merchant.id, event, url, code, iso(new Date(Date.now() - minsAgo * 60000)));
   }
 
   console.log("  ✓ Demo tools: 2 recurring schedules, 2 API keys, 4 webhook deliveries.");

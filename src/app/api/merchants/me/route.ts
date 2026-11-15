@@ -9,12 +9,12 @@ export async function GET() {
   const auth = await requireRole("MERCHANT");
   if (auth instanceof NextResponse) return auth;
 
-  const merchant = getMerchantProfileByUserId(auth.id);
+  const merchant = await getMerchantProfileByUserId(auth.id);
   if (!merchant) return NextResponse.json({ error: "No merchant profile" }, { status: 404 });
 
   return NextResponse.json({
     merchant,
-    documents: listDocuments("merchant", merchant.id),
-    blockReason: merchantBlockReason(merchant),
+    documents: await listDocuments("merchant", merchant.id),
+    blockReason: await merchantBlockReason(merchant),
   });
 }

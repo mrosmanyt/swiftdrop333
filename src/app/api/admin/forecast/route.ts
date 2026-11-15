@@ -13,7 +13,7 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth;
 
   return NextResponse.json({
-    forecast: supplyForecast(),
-    onlineNow: countOnlineCouriers(),
+    forecast: await supplyForecast(),
+    onlineNow: await countOnlineCouriers(),
   });
 }

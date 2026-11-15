@@ -36,10 +36,10 @@ const schema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const caller = authenticateApiRequest(req);
+  const caller = await authenticateApiRequest(req);
   if (!caller) return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
 
-  const orders = listOrdersForMerchant(caller.merchantId, 100).map((o) => ({
+  const orders = (await listOrdersForMerchant(caller.merchantId, 100)).map((o) => ({
     id: o!.id,
     status: o!.status,
     customerName: o!.customerName,
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const caller = authenticateApiRequest(req);
+  const caller = await authenticateApiRequest(req);
   if (!caller) return NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 });
 
   const parsed = schema.safeParse(await req.json());
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   // Zone is optional over the API — fall back to the first active zone so
   // simple integrations don't have to know about zones at all.
-  const zoneId = parsed.data.zoneId ?? listActiveZones()[0]?.id;
+  const zoneId = parsed.data.zoneId ?? (await listActiveZones())[0]?.id;
   if (!zoneId) return NextResponse.json({ error: "No active delivery zones" }, { status: 400 });
 
   try {

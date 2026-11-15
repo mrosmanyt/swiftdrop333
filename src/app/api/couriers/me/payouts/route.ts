@@ -23,12 +23,12 @@ export async function GET() {
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
   return NextResponse.json({
-    summary: courierEarningsSummary(courier.id),
-    requests: listPayoutRequests(courier.id),
+    summary: await courierEarningsSummary(courier.id),
+    requests: await listPayoutRequests(courier.id),
     instantFeePercent: INSTANT_FEE_PERCENT,
   });
 }
@@ -45,10 +45,10 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
-  const summary = courierEarningsSummary(courier.id);
+  const summary = await courierEarningsSummary(courier.id);
   if (parsed.data.amountCents > summary.availableCents) {
     return NextResponse.json(
       { error: `You can cash out up to $${(summary.availableCents / 100).toFixed(2)}.` },
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       ? Math.round((parsed.data.amountCents * INSTANT_FEE_PERCENT) / 100)
       : 0;
 
-  const requestId = createPayoutRequest({
+  const requestId = await createPayoutRequest({
     courierId: courier.id,
     amountCents: parsed.data.amountCents,
     feeCents,

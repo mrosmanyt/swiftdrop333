@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
-import { getOrderById } from "@/lib/repo";
+import { getOrderById, linkOrderToCustomer, toPublicOrder } from "@/lib/repo";
+import { getSessionUser } from "@/lib/session";
 import { isLocale, localeFromHeader, t, Locale, RTL_LOCALES } from "@/lib/i18n";
 import TrackingLive from "@/components/TrackingLive";
 import SupportWidget from "@/components/SupportWidget";
@@ -24,7 +25,7 @@ export default async function TrackOrderPage({
     ? cookieLocale
     : localeFromHeader(headers().get("accept-language"));
 
-  const order = getOrderById(params.orderId);
+  const order = await getOrderById(params.orderId);
   // Urdu/Arabic read right-to-left — flip just this page's direction
   // rather than the whole site chrome, which stays English-authored.
   const dir = RTL_LOCALES.includes(locale) ? "rtl" : "ltr";
@@ -40,6 +41,11 @@ export default async function TrackOrderPage({
     );
   }
 
+  // A signed-in customer who opens their tracking link "claims" the order
+  // for their account history — holding the link is the proof of ownership.
+  const viewer = await getSessionUser();
+  if (viewer?.role === "CUSTOMER") await linkOrderToCustomer(viewer.id, order.id);
+
   return (
     <main dir={dir}>
       <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-6 pt-4">
@@ -47,7 +53,7 @@ export default async function TrackOrderPage({
         <LanguageSwitcher current={locale} />
       </div>
 
-      <TrackingLive orderId={order.id} initialOrder={order as any} locale={locale} />
+      <TrackingLive orderId={order.id} initialOrder={toPublicOrder(order) as any} locale={locale} />
 
       <div className="mx-auto max-w-md px-6 pb-12">
         <SupportWidget

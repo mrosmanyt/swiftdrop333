@@ -13,7 +13,7 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth;
 
   return NextResponse.json({
-    zones: demandHeatmap(24),
-    byHour: demandByHour(7),
+    zones: await demandHeatmap(24),
+    byHour: await demandByHour(7),
   });
 }

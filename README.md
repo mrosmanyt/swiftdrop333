@@ -11,7 +11,9 @@ real name.
 
 ## Quick start
 
-**Prerequisite:** Node.js 22+ (the database uses Node's built-in `node:sqlite`).
+**Prerequisite:** Node.js 22+. No database to install: local development
+runs an embedded PostgreSQL (PGlite) that keeps its files in `./data/pgdata`.
+Production uses Neon Postgres through `DATABASE_URL`.
 
 ```bash
 npm install
@@ -28,7 +30,10 @@ courier, two recurring schedules and a couple of API keys for the merchant,
 so the earnings, Courier+ tier, pay-transparency and webhook screens have
 real data in them the first time you open the app.
 
-**Test accounts** (password `password123` for all):
+**Test accounts — local development only** (password `password123` for all).
+`npm run seed` refuses to run when `NODE_ENV=production`, and if these
+accounts exist in a production database they are suspended on boot (see
+"Security & privacy" below):
 
 | Account | What it shows |
 |---|---|
@@ -137,7 +142,8 @@ src/
     signup/              merchant + courier self-signup
     api/                 all backend routes (v1/ is the public merchant API)
   lib/
-    db.ts                SQLite connection, schema + in-place migrations
+    db.ts                PostgreSQL connection (Neon / local PGlite) + auto-migrations
+    schema.ts            generated from migrations/*.sql (npm run build:schema)
     repo.ts              every database read/write
     dispatch.ts          auto-dispatch engine
     batching.ts          route optimization (nearest-neighbour + 2-opt)
@@ -163,14 +169,52 @@ has the app open. In production, also hit these on a schedule:
 0   6 * * *   GET  /api/merchant/recurring # materialise standing deliveries
 ```
 
-## Deployment
+## Security & privacy
 
-- **App:** Railway, Render, Fly or a VPS. Avoid platforms with an ephemeral
-  filesystem unless you migrate off SQLite first — the database and uploaded
-  photos are files on disk.
-- **Scaling past one server:** swap `src/lib/db.ts` + `src/lib/repo.ts` for
-  Postgres. Every route goes through `repo.ts`, so it's a contained change.
-- **Uploads:** move `/public/uploads` and `/private-uploads` to S3/R2 before
-  running more than one instance.
+- **No banking or card data is stored.** There is no field for card,
+  bank, transit/institution numbers or SIN, and void-cheque uploads are not
+  accepted. Payments/payouts must go through a provider (e.g. Stripe
+  Connect) so those details never touch this database.
+- **Identity documents** are encrypted with AES-256-GCM (`DATA_ENCRYPTION_KEY`)
+  before being written to the volume, only admins can view them (every view
+  is audit-logged), and the files are deleted 30 days after the application
+  is reviewed. Licence/policy numbers are stored as the last 4 characters only.
+- **Uploads go to private Vercel Blob** on Vercel (or `./data/uploads` when
+  self-hosting), never in `public/`. Delivery photos have
+  EXIF/GPS metadata stripped and are served via `/api/pod/:name`.
+- **Retention** (`src/lib/retention.ts`, runs hourly): notification logs
+  (which never contain message text or full phone numbers/emails) and chat
+  are removed after 90 days, delivery photos after 90 days, customer
+  phone/email/instructions on finished orders after 12 months, location
+  history after 24 hours, and deleted/closed accounts are erased after 30
+  days. Order totals are kept for accounting.
+- **Accounts:** every portal has *Account & privacy* (change password,
+  delete account). Admins can erase a deleted account immediately from
+  *Deleted records*. Login is rate-limited; suspended accounts can't sign in
+  and their sessions stop working immediately.
+- **Production checklist:** start command is just `next start` (never run
+  the seed or pass passwords on the command line), set a strong
+  `NEXTAUTH_SECRET` and `DATA_ENCRYPTION_KEY`, and back up the volume
+  encrypted.
+
+## Deployment (Vercel)
+
+- **Database:** Neon Postgres, connected under *Storage* in the Vercel
+  project — that sets `DATABASE_URL`. The schema (`migrations/*.sql`) is
+  applied automatically the first time the app touches the database, so
+  there is no separate migrate step. A file database cannot work on Vercel:
+  the filesystem is read-only.
+- **Uploads:** private Vercel Blob (`BLOB_READ_WRITE_TOKEN`).
+- **Required variables:** `DATABASE_URL`, `NEXTAUTH_SECRET`,
+  `DATA_ENCRYPTION_KEY`, `BLOB_READ_WRITE_TOKEN`.
+- **First admin for the live site:** put the production `DATABASE_URL` in
+  `.env.local` on your machine, then run
+  `npm run create-admin -- you@yourdomain.ca` and type the password at the
+  prompt. Remove the line from `.env.local` afterwards so local development
+  goes back to the local database. Then sign in at `/login`, open `/admin`
+  and create your delivery zones under *Zones*.
+- **Schema changes:** add a new numbered file in `migrations/`, run
+  `npm run build:schema`, commit both. Never edit a migration that has
+  already run against the live database.
 - Set every variable from `.env.example` in your host's environment. Never
   commit `.env`.

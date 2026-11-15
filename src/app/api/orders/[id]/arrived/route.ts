@@ -11,10 +11,10 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 400 });
 
-  const ok = markArrivedAtPickup(params.id, courier.id);
+  const ok = await markArrivedAtPickup(params.id, courier.id);
   if (!ok) return NextResponse.json({ error: "Already recorded or not your delivery" }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

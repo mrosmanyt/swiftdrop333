@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
 import { findApiKeyByHash, touchApiKey, getMerchantProfileById } from "@/lib/repo";
+import { merchantBlockReason } from "@/lib/guards";
 
 /**
  * API key auth for the public merchant API (/api/v1/*).
@@ -24,17 +25,19 @@ export interface ApiCaller {
 }
 
 /** Reads `Authorization: Bearer sk_live_...` and resolves the merchant. */
-export function authenticateApiRequest(req: NextRequest): ApiCaller | null {
+export async function authenticateApiRequest(req: NextRequest): Promise<ApiCaller | null> {
   const header = req.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : null;
   if (!token) return null;
 
-  const record = findApiKeyByHash(hashKey(token));
+  const record = await findApiKeyByHash(hashKey(token));
   if (!record) return null;
 
-  const merchant = getMerchantProfileById(record.merchant_id);
-  if (!merchant || merchant.kybStatus !== "verified") return null;
+  // Same gate as the portal: a suspended, deleted or unverified merchant's
+  // keys stop working immediately, not just their browser session.
+  const merchant = await getMerchantProfileById(record.merchant_id);
+  if (await merchantBlockReason(merchant as any) || (merchant as any)?.deletedAt) return null;
 
-  touchApiKey(record.id);
+  await touchApiKey(record.id);
   return { merchantId: record.merchant_id, keyId: record.id };
 }

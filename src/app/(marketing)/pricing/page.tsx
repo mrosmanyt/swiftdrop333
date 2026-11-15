@@ -54,8 +54,8 @@ const SERVICES = [
   },
 ];
 
-export default function PricingPage() {
-  const zones = listActiveZones();
+export default async function PricingPage() {
+  const zones = await listActiveZones();
   // 3 km is a representative city hop — used only to illustrate the rate.
   const sampleDistanceKm = 3;
 

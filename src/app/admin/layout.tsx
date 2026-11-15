@@ -57,6 +57,7 @@ const GROUPS: { title: string; links: SidebarLink[] }[] = [
     title: "Records",
     links: [
       { href: "/admin/deleted-records", label: "Deleted records", icon: <Icon d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16zM10 11v6M14 11v6" /> },
+      { href: "/admin/account", label: "Account & privacy", icon: <Icon d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" /> },
     ],
   },
 ];

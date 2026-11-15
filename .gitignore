@@ -53,3 +53,15 @@ website-*.png
 /swiftdrop-scaffold/
 /swiftdrop-extracted/
 /Claude outputs/
+
+# Uploaded files — identity documents and delivery photos. These live on the
+# persistent volume next to the database and must never be committed.
+/private-uploads/
+/uploads/
+/data/uploads/
+
+.vercel
+.env*
+
+# local safety backups
+_backup-*.tar.gz

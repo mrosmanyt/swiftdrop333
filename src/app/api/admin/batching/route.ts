@@ -11,5 +11,5 @@ import { runBatchingPass } from "@/lib/batchService";
 export async function POST() {
   const auth = await requireRole("ADMIN");
   if (auth instanceof NextResponse) return auth;
-  return NextResponse.json(runBatchingPass());
+  return NextResponse.json(await runBatchingPass());
 }

@@ -8,8 +8,8 @@ import { clusterOrders, optimizeRoute, Stop } from "@/lib/batching";
  * BATCH/NEXT_DAY orders — same-day and Direct stay single-drop because
  * speed matters more than density for those.
  */
-export function runBatchingPass(options?: { maxStops?: number; radiusKm?: number }) {
-  const orders = listBatchableOrders(100);
+export async function runBatchingPass(options?: { maxStops?: number; radiusKm?: number }) {
+  const orders = await listBatchableOrders(100);
   const clusters = clusterOrders(orders as any[], options);
 
   const created: { batchId: string; stops: number; savingsPercent: number; totalKm: number }[] = [];
@@ -36,7 +36,7 @@ export function runBatchingPass(options?: { maxStops?: number; radiusKm?: number
     const optimized = optimizeRoute(stops, start);
     const totalCourierFee = clusterOrdersList.reduce((sum, o) => sum + (o!.courierFeeCents ?? 0), 0);
 
-    const batchId = createBatch({
+    const batchId = await createBatch({
       zoneId: cluster.zoneId,
       orderIds: optimized.stops.map((s) => s.id),
       totalKm: Math.round(optimized.totalKm * 100) / 100,
@@ -55,8 +55,8 @@ export function runBatchingPass(options?: { maxStops?: number; radiusKm?: number
 }
 
 /** Re-run optimization on an existing batch (e.g. after a stop is removed). */
-export function reoptimizeBatch(batchId: string) {
-  const orders = listOrdersInBatch(batchId);
+export async function reoptimizeBatch(batchId: string) {
+  const orders = await listOrdersInBatch(batchId);
   const withCoords = orders.filter((o) => o!.dropoffLat != null && o!.dropoffLng != null);
   if (withCoords.length < 2) return null;
 

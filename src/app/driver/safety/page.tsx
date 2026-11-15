@@ -7,7 +7,7 @@ export default async function DriverSafetyPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "COURIER") redirect("/login");
 
-  const courier = getCourierProfileByUserId(user.id);
+  const courier = await getCourierProfileByUserId(user.id);
   if (!courier) return <p>No courier profile found.</p>;
 
   return (

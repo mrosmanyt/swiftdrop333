@@ -20,13 +20,13 @@ export async function POST(req: NextRequest) {
   const auth = await requireRole("MERCHANT");
   if (auth instanceof NextResponse) return auth;
 
-  const merchant = getMerchantProfileByUserId(auth.id);
-  const blocked = merchantBlockReason(merchant);
+  const merchant = await getMerchantProfileByUserId(auth.id);
+  const blocked = await merchantBlockReason(merchant);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   const form = await req.formData();
   const file = form.get("file");
-  const zoneId = String(form.get("zoneId") ?? "") || listActiveZones()[0]?.id;
+  const zoneId = String(form.get("zoneId") ?? "") || (await listActiveZones())[0]?.id;
   const defaultPickup = String(form.get("pickupAddress") ?? "") || merchant!.businessAddress || "";
   const geocode = String(form.get("geocode") ?? "true") === "true";
 

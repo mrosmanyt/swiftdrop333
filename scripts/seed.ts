@@ -4,6 +4,7 @@
  *
  * Run with: npm run seed   (or npm run db:reset to wipe and reseed)
  */
+import { usingRemoteDatabase } from "./_env";
 import bcrypt from "bcryptjs";
 import {
   createUser,
@@ -16,40 +17,55 @@ import {
 import { seedDemoHistory, seedDemoMerchantTools } from "./demo-history";
 
 async function main() {
-  if (findUserByEmail("merchant@example.com")) {
+  // The seed creates accounts with a public password (including an ADMIN).
+  // It must never run against a production database.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_ACCOUNTS !== "true") {
+    console.log("Seed skipped: NODE_ENV=production. Demo accounts are never created in production.");
+    return;
+  }
+  // Same rule for a hosted database reached from a laptop: DATABASE_URL in
+  // .env.local usually means "the live Neon database".
+  if (usingRemoteDatabase && process.env.ALLOW_DEMO_ACCOUNTS !== "true") {
+    console.log(
+      "Seed skipped: DATABASE_URL points at a hosted database. Demo accounts (public password) are only\n" +
+        "created in the local development database. Remove DATABASE_URL from .env.local to seed locally."
+    );
+    return;
+  }
+  if (await findUserByEmail("merchant@example.com")) {
     console.log("Already seeded — run `npm run db:reset` to wipe and reseed.");
     return;
   }
 
   const passwordHash = await bcrypt.hash("password123", 10);
 
-  const downtownZoneId = createZone({
+  const downtownZoneId = await createZone({
     city: "Toronto",
     name: "Downtown Core",
     baseRateCents: 899,
     perKmCents: 50,
   });
-  createZone({
+  await createZone({
     city: "Toronto",
     name: "North York",
     baseRateCents: 999,
     perKmCents: 60,
   });
-  createZone({
+  await createZone({
     city: "Vancouver",
     name: "Downtown Vancouver",
     baseRateCents: 949,
     perKmCents: 55,
   });
 
-  const merchantUserId = createUser({
+  const merchantUserId = await createUser({
     email: "merchant@example.com",
     fullName: "Sara Ahmed",
     phone: "4165550101",
     passwordHash,
     role: "MERCHANT",
   });
-  const merchantId = createMerchantProfile({
+  const merchantId = await createMerchantProfile({
     userId: merchantUserId,
     businessName: "Corner Bakery Co.",
     contactName: "Sara Ahmed",
@@ -58,14 +74,14 @@ async function main() {
     kybStatus: "verified", // pre-approved so you can test deliveries immediately
   });
 
-  const courierUserId = createUser({
+  const courierUserId = await createUser({
     email: "courier@example.com",
     fullName: "Bilal Khan",
     phone: "4165550102",
     passwordHash,
     role: "COURIER",
   });
-  const courierId = createCourierProfile({
+  const courierId = await createCourierProfile({
     userId: courierUserId,
     vehicleType: "BIKE",
     fullName: "Bilal Khan",
@@ -76,13 +92,13 @@ async function main() {
 
   // Two applications left pending so the admin approval queue has something
   // real to review at /admin/applications.
-  const pendingMerchantUserId = createUser({
+  const pendingMerchantUserId = await createUser({
     email: "pending-merchant@example.com",
     fullName: "Omar Farooq",
     passwordHash,
     role: "MERCHANT",
   });
-  createMerchantProfile({
+  await createMerchantProfile({
     userId: pendingMerchantUserId,
     businessName: "Bloom & Petal Florist",
     contactName: "Omar Farooq",
@@ -92,13 +108,13 @@ async function main() {
     kybStatus: "pending",
   });
 
-  const pendingCourierUserId = createUser({
+  const pendingCourierUserId = await createUser({
     email: "pending-courier@example.com",
     fullName: "Maria Santos",
     passwordHash,
     role: "COURIER",
   });
-  createCourierProfile({
+  await createCourierProfile({
     userId: pendingCourierUserId,
     vehicleType: "CAR",
     fullName: "Maria Santos",
@@ -111,18 +127,18 @@ async function main() {
     approvalStatus: "pending",
   });
 
-  const adminUserId = createUser({
+  const adminUserId = await createUser({
     email: "admin@example.com",
     passwordHash,
     role: "ADMIN",
   });
-  createAdminProfile({
+  await createAdminProfile({
     userId: adminUserId,
     permissions: ["manage_merchants", "manage_couriers", "manage_pricing"],
   });
 
-  seedDemoHistory();
-  seedDemoMerchantTools();
+  await seedDemoHistory();
+  await seedDemoMerchantTools();
 
   console.log("Seeded successfully. Test accounts (password for all: password123):");
   console.log("  merchant@example.com          — approved, can book deliveries");
@@ -134,7 +150,9 @@ async function main() {
   console.log("Zones created — first zone id (Downtown Core):", downtownZoneId);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

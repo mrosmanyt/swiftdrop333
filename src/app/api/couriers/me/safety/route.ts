@@ -13,9 +13,9 @@ export async function PATCH(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 404 });
 
-  setCourierEmergencyContact(courier.id, parsed.data.name, parsed.data.phone);
+  await setCourierEmergencyContact(courier.id, parsed.data.name, parsed.data.phone);
   return NextResponse.json({ ok: true });
 }

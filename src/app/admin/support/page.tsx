@@ -10,10 +10,10 @@ export default async function AdminSupportPage() {
 
   return (
     <SupportCentre
-      tickets={listTickets()}
-      counts={ticketCounts()}
-      disputes={listDisputes()}
-      fraudFlags={listFraudFlags("open")}
+      tickets={await listTickets()}
+      counts={await ticketCounts()}
+      disputes={await listDisputes()}
+      fraudFlags={await listFraudFlags("open")}
     />
   );
 }

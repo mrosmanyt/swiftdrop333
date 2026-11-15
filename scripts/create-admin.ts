@@ -9,9 +9,14 @@
  * email already belongs to an admin, this resets their password instead of
  * failing, so a locked-out admin can be recovered the same way.
  *
+ * Which database? The one in DATABASE_URL (.env.local / .env / shell) if it
+ * is set — that is how you create the first admin for the live Vercel site —
+ * otherwise the local development database.
+ *
  * Passing the password as an argument leaves it in your shell history. For
  * anything you actually care about, omit it and type it at the prompt.
  */
+import { usingRemoteDatabase } from "./_env";
 import bcrypt from "bcryptjs";
 import readline from "node:readline";
 import { db } from "../src/lib/db";
@@ -48,6 +53,11 @@ function ask(question: string): Promise<string> {
 
 async function main() {
   const [emailArg, passwordArg] = process.argv.slice(2);
+  console.log(
+    usingRemoteDatabase
+      ? "  • Using the hosted database from DATABASE_URL."
+      : "  • Using the local development database (./data/pgdata). Set DATABASE_URL in .env.local to create an admin on the live site."
+  );
 
   const email = (emailArg ?? (await ask("Admin email: "))).trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -63,7 +73,7 @@ async function main() {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
-  const existing = findUserByEmail(email) as any;
+  const existing = await findUserByEmail(email) as any;
 
   if (existing) {
     if (existing.role !== "ADMIN") {
@@ -73,19 +83,21 @@ async function main() {
       );
       process.exit(1);
     }
-    db.prepare(`UPDATE users SET password_hash = ?, status = 'active', updated_at = datetime('now') WHERE id = ?`)
+    await db.prepare(`UPDATE users SET password_hash = ?, status = 'active', updated_at = datetime('now') WHERE id = ?`)
       .run(passwordHash, existing.id);
     console.log(`  ✓ Password reset for existing admin ${email}.`);
     return;
   }
 
-  const userId = createUser({ email, passwordHash, role: "ADMIN" });
-  createAdminProfile({ userId, permissions: PERMISSIONS });
+  const userId = await createUser({ email, passwordHash, role: "ADMIN" });
+  await createAdminProfile({ userId, permissions: PERMISSIONS });
   console.log(`  ✓ Admin created: ${email}`);
   console.log(`    Sign in at /login — the console is at /admin (never linked from the public site).`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

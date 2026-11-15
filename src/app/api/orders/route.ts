@@ -43,22 +43,28 @@ export async function GET(req: NextRequest) {
   const view = searchParams.get("view"); // "active" | "delivered" (courier only)
 
   if (user.role === "MERCHANT") {
-    const merchant = getMerchantProfileByUserId(user.id);
+    const merchant = await getMerchantProfileByUserId(user.id);
     if (!merchant) return NextResponse.json({ orders: [] });
-    return NextResponse.json({ orders: listOrdersForMerchant(merchant.id) });
+    return NextResponse.json({ orders: await listOrdersForMerchant(merchant.id) });
   }
 
   if (user.role === "COURIER") {
-    const courier = getCourierProfileByUserId(user.id);
+    const courier = await getCourierProfileByUserId(user.id);
     if (!courier) return NextResponse.json({ orders: [] });
     const orders =
       view === "delivered"
-        ? listDeliveredOrdersForCourier(courier.id)
-        : listActiveOrdersForCourier(courier.id);
+        ? await listDeliveredOrdersForCourier(courier.id)
+        : await listActiveOrdersForCourier(courier.id);
     return NextResponse.json({ orders });
   }
 
-  return NextResponse.json({ orders: listAllOrders() });
+  // Only admins get the platform-wide list. Every other role (CUSTOMER in
+  // particular) must never fall through to it — that would expose every
+  // customer's name, phone, email and address to anyone who signs up.
+  if (user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden for this role" }, { status: 403 });
+  }
+  return NextResponse.json({ orders: await listAllOrders() });
 }
 
 /**
@@ -76,8 +82,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Only merchants can create orders" }, { status: 403 });
   }
 
-  const merchant = getMerchantProfileByUserId(user.id);
-  const blocked = merchantBlockReason(merchant);
+  const merchant = await getMerchantProfileByUserId(user.id);
+  const blocked = await merchantBlockReason(merchant);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
   const parsed = createOrderSchema.safeParse(await req.json());

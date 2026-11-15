@@ -21,10 +21,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 400 });
 
-  const order = getOrderById(params.id);
+  const order = await getOrderById(params.id);
   if (!order || order.courierId !== courier.id) {
     return NextResponse.json({ error: "Not your delivery" }, { status: 403 });
   }
@@ -38,7 +38,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     );
   }
 
-  recordAgeVerification(params.id, courier.id, parsed.data.method);
+  const recorded = await recordAgeVerification(params.id, courier.id, parsed.data.method);
+  if (recorded === false) {
+    return NextResponse.json({ error: "This delivery isn't in progress any more." }, { status: 409 });
+  }
 
   return NextResponse.json({
     ok: true,

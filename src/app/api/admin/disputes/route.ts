@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const status = new URL(req.url).searchParams.get("status") ?? undefined;
-  return NextResponse.json({ disputes: listDisputes(status) });
+  return NextResponse.json({ disputes: await listDisputes(status) });
 }
 
 const schema = z.object({
@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest) {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const ok = resolveDispute({ ...parsed.data, adminUserId: auth.id });
+  const ok = await resolveDispute({ ...parsed.data, adminUserId: auth.id });
   if (!ok) return NextResponse.json({ error: "Dispute not found or already settled" }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

@@ -8,7 +8,7 @@ export default async function AdminMerchantsPage() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") redirect("/login");
 
-  const merchants = listMerchants();
+  const merchants = await listMerchants();
 
   return (
     <div className="space-y-4">
@@ -30,7 +30,7 @@ export default async function AdminMerchantsPage() {
             </tr>
           </thead>
           <tbody>
-            {merchants.map((m) => (
+            {await Promise.all(merchants.map(async (m) => (
               <tr key={m!.id} className="border-t border-line">
                 <td className="p-3">{m!.businessName}</td>
                 <td className="p-3">{m!.email}</td>
@@ -46,8 +46,8 @@ export default async function AdminMerchantsPage() {
                 <td className="p-3">{m!.orderCount}</td>
                 <td className="p-3">{m!.rating ? `${m!.rating.toFixed(1)}★` : "—"}</td>
                 <td className="p-3">
-                  {(() => {
-                    const s = merchantPickupStats(m!.id);
+                  {await (async () => {
+                    const s = await merchantPickupStats(m!.id);
                     if (!s.samples || s.avgWaitMinutes == null) return <span className="text-fg-subtle">—</span>;
                     const slow = s.avgWaitMinutes > 10;
                     return (
@@ -62,7 +62,7 @@ export default async function AdminMerchantsPage() {
                   <AdminDeleteButton resource="merchants" id={m!.id} label={m!.businessName} />
                 </td>
               </tr>
-            ))}
+            )))}
             {!merchants.length && (
               <tr>
                 <td className="p-3 text-fg-subtle" colSpan={7}>

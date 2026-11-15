@@ -21,10 +21,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const courier = getCourierProfileByUserId(auth.id);
+  const courier = await getCourierProfileByUserId(auth.id);
   if (!courier) return NextResponse.json({ error: "No courier profile" }, { status: 400 });
 
-  const ok = submitMerchantRating(params.id, courier.id, parsed.data.rating, parsed.data.comment);
+  const ok = await submitMerchantRating(params.id, courier.id, parsed.data.rating, parsed.data.comment);
   if (!ok) {
     return NextResponse.json(
       { error: "Not your delivery, already rated, or not picked up yet." },

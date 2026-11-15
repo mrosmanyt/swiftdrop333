@@ -8,11 +8,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const auth = await requireRole("COURIER");
   if (auth instanceof NextResponse) return auth;
 
-  const courier = getCourierProfileByUserId(auth.id);
-  const blocked = courierBlockReason(courier);
+  const courier = await getCourierProfileByUserId(auth.id);
+  const blocked = await courierBlockReason(courier);
   if (blocked) return NextResponse.json({ error: blocked }, { status: 403 });
 
-  const ok = assignBatchToCourier(params.id, courier!.id);
+  const ok = await assignBatchToCourier(params.id, courier!.id);
   if (!ok) {
     return NextResponse.json({ error: "This route was already taken." }, { status: 409 });
   }

@@ -19,7 +19,7 @@ export type FraudRule =
 
 const now = () => new Date().toISOString();
 
-function flag(input: {
+async function flag(input: {
   subjectType: "courier" | "merchant" | "order";
   subjectId: string;
   orderId?: string | null;
@@ -28,16 +28,16 @@ function flag(input: {
   detail: string;
 }) {
   // Don't stack identical open flags for the same subject + rule.
-  const existing = db
+  const existing = await db
     .prepare(
       `SELECT id FROM fraud_flags WHERE subject_type = ? AND subject_id = ? AND rule = ? AND status = 'open'
-       AND (order_id IS ? OR order_id = ?)`
+       AND order_id IS NOT DISTINCT FROM ?`
     )
-    .get(input.subjectType, input.subjectId, input.rule, input.orderId ?? null, input.orderId ?? null);
+    .get(input.subjectType, input.subjectId, input.rule, input.orderId ?? null);
   if (existing) return null;
 
   const flagId = randomUUID();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO fraud_flags (id, subject_type, subject_id, order_id, rule, severity, detail, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)`
   ).run(
@@ -58,8 +58,8 @@ function flag(input: {
  * could manage. 200 km/h between pings in a city means the location is
  * being faked (or the device jumped networks — hence "review", not "ban").
  */
-export function checkLocationJump(courierId: string, lat: number, lng: number) {
-  const last = db
+export async function checkLocationJump(courierId: string, lat: number, lng: number) {
+  const last = await db
     .prepare(
       `SELECT lat, lng, created_at FROM courier_location_pings
        WHERE courier_id = ? ORDER BY created_at DESC LIMIT 1`
@@ -88,8 +88,8 @@ export function checkLocationJump(courierId: string, lat: number, lng: number) {
  * Same proof-of-delivery photo reused across deliveries — the classic way
  * a courier fakes drops without leaving home.
  */
-export function checkDuplicateProof(orderId: string, courierId: string, proofUrl: string) {
-  const dupe = db
+export async function checkDuplicateProof(orderId: string, courierId: string, proofUrl: string) {
+  const dupe = await db
     .prepare(
       `SELECT id FROM orders WHERE proof_of_delivery_url = ? AND id != ? LIMIT 1`
     )
@@ -110,8 +110,8 @@ export function checkDuplicateProof(orderId: string, courierId: string, proofUrl
  * Delivery completed suspiciously fast after pickup — e.g. marked
  * delivered 40 seconds after collecting a parcel 6 km away.
  */
-export function checkInstantDelivery(orderId: string, courierId: string) {
-  const o = db
+export async function checkInstantDelivery(orderId: string, courierId: string) {
+  const o = await db
     .prepare(
       `SELECT picked_up_at, delivered_at, distance_km FROM orders WHERE id = ?`
     )
@@ -138,8 +138,8 @@ export function checkInstantDelivery(orderId: string, courierId: string) {
 }
 
 /** A courier failing or cancelling a lot of deliveries in a short window. */
-export function checkCancelRate(courierId: string) {
-  const row = db
+export async function checkCancelRate(courierId: string) {
+  const row = await db
     .prepare(
       `SELECT
          SUM(CASE WHEN status IN ('FAILED','RETURNING','RETURNED') THEN 1 ELSE 0 END) as bad,
@@ -163,10 +163,10 @@ export function checkCancelRate(courierId: string) {
   return null;
 }
 
-export function listFraudFlags(status = "open") {
-  return db
+export async function listFraudFlags(status = "open") {
+  return (await db
     .prepare(
-      `SELECT f.*, u.email as courierEmail FROM fraud_flags f
+      `SELECT f.*, u.email as "courierEmail" FROM fraud_flags f
        LEFT JOIN courier_profiles c ON c.id = f.subject_id AND f.subject_type = 'courier'
        LEFT JOIN users u ON u.id = c.user_id
        WHERE f.status = ? ORDER BY
@@ -174,12 +174,12 @@ export function listFraudFlags(status = "open") {
          f.created_at DESC
        LIMIT 100`
     )
-    .all(status)
+    .all(status))
     .map((r: any) => ({ ...(r as object) })) as any[];
 }
 
-export function resolveFraudFlag(flagId: string, status: "reviewed" | "dismissed", adminUserId: string) {
-  const result = db
+export async function resolveFraudFlag(flagId: string, status: "reviewed" | "dismissed", adminUserId: string) {
+  const result = await db
     .prepare(`UPDATE fraud_flags SET status = ?, reviewed_by = ? WHERE id = ?`)
     .run(status, adminUserId, flagId);
   return result.changes > 0;
