@@ -157,6 +157,10 @@ export interface UserRow {
   status: string;
   locale: string;
   passwordChangedAt: string | null;
+  /** Staff role for ADMIN users (owner | administrator | editor | sales | viewer). NULL = owner. */
+  staffRole: string | null;
+  /** Sessions issued before this moment are refused (sign out everywhere / role change). */
+  sessionsValidAfter: string | null;
   createdAt: string;
 }
 
@@ -172,6 +176,8 @@ function mapUser(r: any): UserRow | null {
     status: r.status ?? "active",
     locale: r.locale ?? "en",
     passwordChangedAt: r.password_changed_at ?? null,
+    staffRole: r.staff_role ?? null,
+    sessionsValidAfter: r.sessions_valid_after ?? null,
     createdAt: r.created_at,
   };
 }

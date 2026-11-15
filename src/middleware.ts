@@ -1,5 +1,6 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import { isLimitedStaff } from "@/lib/cms/permissions";
 
 /**
  * Role-based route protection for the four internal portals.
@@ -20,6 +21,17 @@ export default withAuth(
     }
     if (pathname.startsWith("/admin") && role !== "ADMIN") {
       return NextResponse.redirect(new URL("/login", req.url));
+    }
+    // Content editors, sales staff and viewers only ever see the Website
+    // area (plus their own account screen). The pages and API routes refuse
+    // them as well — this just sends them somewhere useful.
+    if (
+      pathname.startsWith("/admin") &&
+      isLimitedStaff((req.nextauth.token as any)?.staffRole) &&
+      !pathname.startsWith("/admin/website") &&
+      !pathname.startsWith("/admin/account")
+    ) {
+      return NextResponse.redirect(new URL("/admin/website", req.url));
     }
     if (pathname.startsWith("/customer") && role !== "CUSTOMER") {
       return NextResponse.redirect(new URL("/login", req.url));

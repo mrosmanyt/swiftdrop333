@@ -5,14 +5,16 @@ import { useEffect, useState } from "react";
 import Logo from "./Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 
-const LINKS = [
-  { href: "/#how", label: "How it works" },
-  { href: "/features", label: "Features" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/couriers", label: "Drive with us" },
-];
-
-export default function MarketingNav() {
+/** Links and button text come from Website → Menu, footer & contact details. */
+export default function MarketingNav({
+  links: LINKS,
+  signInLabel,
+  ctaLabel,
+}: {
+  links: { href: string; label: string }[];
+  signInLabel: string;
+  ctaLabel: string;
+}) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -25,6 +27,8 @@ export default function MarketingNav() {
 
   return (
     <header
+      // Sits just under the announcement bar when there is one (0px otherwise).
+      style={{ top: "var(--announce-h, 0px)" }}
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
         scrolled ? "border-b border-line bg-bg/80 backdrop-blur-xl" : "border-b border-transparent"
       }`}
@@ -37,7 +41,7 @@ export default function MarketingNav() {
         <div className="hidden items-center gap-1 md:flex">
           {LINKS.map((l) => (
             <Link
-              key={l.href}
+              key={`${l.href}-${l.label}`}
               href={l.href}
               className="rounded-lg px-3 py-2 text-[13.5px] text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg"
             >
@@ -52,13 +56,13 @@ export default function MarketingNav() {
             href="/login"
             className="rounded-lg px-3 py-2 text-[13.5px] text-fg-muted transition-colors hover:text-fg"
           >
-            Sign in
+            {signInLabel}
           </Link>
           <Link
             href="/signup"
             className="rounded-lg bg-inverse px-3.5 py-2 text-[13.5px] font-medium text-inverse-fg transition-transform hover:scale-[1.02] active:scale-[0.99]"
           >
-            Get started
+            {ctaLabel}
           </Link>
         </div>
 
@@ -82,7 +86,7 @@ export default function MarketingNav() {
           <div className="flex flex-col gap-1">
             {LINKS.map((l) => (
               <Link
-                key={l.href}
+                key={`${l.href}-${l.label}`}
                 href={l.href}
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-3 py-2.5 text-sm text-fg-muted hover:bg-fg/5 hover:text-fg"
@@ -96,14 +100,14 @@ export default function MarketingNav() {
                 onClick={() => setOpen(false)}
                 className="flex-1 rounded-lg border border-line px-3 py-2.5 text-center text-sm text-fg/80"
               >
-                Sign in
+                {signInLabel}
               </Link>
               <Link
                 href="/signup"
                 onClick={() => setOpen(false)}
                 className="flex-1 rounded-lg bg-inverse px-3 py-2.5 text-center text-sm font-medium text-inverse-fg"
               >
-                Get started
+                {ctaLabel}
               </Link>
             </div>
           </div>

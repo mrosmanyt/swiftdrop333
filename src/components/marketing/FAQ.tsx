@@ -2,39 +2,13 @@
 
 import { useState } from "react";
 
-const ITEMS = [
-  {
-    q: "How is the price worked out?",
-    a: "A flat base rate for the delivery zone, plus a per-kilometre amount for the actual distance, adjusted by the service type you pick. Batch is the cheapest, Direct (a courier who carries nothing else) is the most expensive. You see the price before you confirm, and the full rate card is public.",
-  },
-  {
-    q: "Do you take a commission on my sales?",
-    a: "No. You pay for the delivery, and that's it. What the customer paid you for the goods is none of our business — that's the main reason local shops move to us from food-delivery style platforms.",
-  },
-  {
-    q: "What happens if nobody's home?",
-    a: "The courier records why, and the parcel comes back to you rather than being left somewhere unsafe. You get an email the moment that happens, with the reason attached, and the whole attempt is on the order's timeline.",
-  },
-  {
-    q: "Can I send alcohol or pharmacy items?",
-    a: "Yes, with ID verification switched on for that order. The courier physically cannot mark it delivered until they've recorded the ID check, and if the recipient can't produce ID the parcel is returned to you automatically.",
-  },
-  {
-    q: "Does it connect to my online store?",
-    a: "Yes. There's a REST API with your own keys and outbound webhooks, so your store can create deliveries and receive status updates automatically. If you'd rather not touch code, you can upload a CSV of up to 200 orders at once.",
-  },
-  {
-    q: "What do couriers actually earn?",
-    a: "72% of the delivery fee, plus a per-delivery bonus that grows with tier (up to 20¢ at Pro), plus any challenge bonuses. Surge raises the whole fare, so the courier's share goes up with it. Every courier can see a full breakdown of engaged time and effective hourly rate in their app.",
-  },
-];
-
-export default function FAQ() {
+/** Questions come from Website → Questions (FAQ) in the admin console. */
+export default function FAQ({ items }: { items: { q: string; a: string }[] }) {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
     <div className="divide-y divide-line border-y border-line">
-      {ITEMS.map((item, i) => {
+      {items.map((item, i) => {
         const isOpen = open === i;
         return (
           <div key={item.q}>

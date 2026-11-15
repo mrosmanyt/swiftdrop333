@@ -14,7 +14,7 @@ const schema = z.object({
 
 /** POST /api/account/password — any signed-in user changes their own password. */
 export async function POST(req: NextRequest) {
-  const session = await getSessionUser();
+  const session = await getSessionUser({ allowLimitedStaff: true });
   if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   if (!hit(`pwchange:${session.id}`, 5, 15 * 60 * 1000).ok) {

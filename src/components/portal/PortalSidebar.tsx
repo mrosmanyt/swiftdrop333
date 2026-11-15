@@ -35,8 +35,15 @@ export default function PortalSidebar({
 
   useEffect(() => setOpen(false), [pathname]);
 
+  // A link is active on its own page and the pages beneath it — unless a
+  // more specific link in the menu matches (so "/admin/website" doesn't
+  // light up while you're on "/admin/website/enquiries").
+  const allHrefs = groups.flatMap((g) => g.links.map((l) => l.href));
   const isActive = (href: string) =>
-    pathname === href || (pathname.startsWith(href + "/") && href.split("/").length > 2);
+    pathname === href ||
+    (pathname.startsWith(href + "/") &&
+      href.split("/").length > 2 &&
+      !allHrefs.some((h) => h.length > href.length && (pathname === h || pathname.startsWith(h + "/"))));
 
   const NavLinks = () => (
     <nav className="flex flex-col gap-5">

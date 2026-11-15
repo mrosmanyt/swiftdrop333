@@ -1,7 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { findUserByEmail } from "@/lib/repo";
+import { findUserByEmail, writeAudit } from "@/lib/repo";
 import { clientIp, hit, isBlocked, reset } from "@/lib/rateLimit";
 
 // Placeholder values that ship in .env.example / docs. A JWT signed with a
@@ -108,7 +108,9 @@ export const authOptions: NextAuthOptions = {
         }
 
         reset(acctIpKey);
-        return { id: user.id, email: user.email, role: user.role };
+        // Staff sign-ins appear in the admin console's activity log.
+        if (user.role === "ADMIN") await writeAudit(user.id, "staff_signed_in", "user", user.id).catch(() => {});
+        return { id: user.id, email: user.email, role: user.role, staffRole: user.staffRole } as any;
       },
     }),
   ],
@@ -117,6 +119,9 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.role = (user as any).role;
         token.id = (user as any).id;
+        // Lets the middleware keep limited staff inside the Website area
+        // without a database lookup. The server re-checks the live value.
+        token.staffRole = (user as any).staffRole ?? null;
         token.authAt = Date.now();
       }
       return token;

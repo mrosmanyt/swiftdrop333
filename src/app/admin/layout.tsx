@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import PortalSidebar, { type SidebarLink } from "@/components/portal/PortalSidebar";
 import PushOptIn from "@/components/PushOptIn";
+import { getSessionUser } from "@/lib/session";
+import { can, normalizeStaffRole } from "@/lib/cms/permissions";
 
 /**
  * The admin console is internal-only: it is never linked from the public
@@ -24,7 +26,7 @@ function Icon({ d }: { d: string }) {
 // Twelve destinations, grouped so related sections sit together instead of
 // one long undifferentiated list — this is what actually fixed the "hard to
 // find the right menu" complaint, not just moving links into a sidebar.
-const GROUPS: { title: string; links: SidebarLink[] }[] = [
+const OPS_GROUPS: { title: string; links: SidebarLink[] }[] = [
   {
     title: "Overview",
     links: [
@@ -62,14 +64,36 @@ const GROUPS: { title: string; links: SidebarLink[] }[] = [
   },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+// The Website area: content, enquiries and the people who manage them.
+// Each link is only shown to roles that are allowed to open it (the pages
+// and API routes check again on the server).
+const WEBSITE_LINKS: (SidebarLink & { needs: Parameters<typeof can>[1] })[] = [
+  { href: "/admin/website", label: "Website overview", needs: "analytics.view", icon: <Icon d="M3 12h4l3-8 4 16 3-8h4" /> },
+  { href: "/admin/website/enquiries", label: "Enquiries", needs: "enquiries.view", icon: <Icon d="M4 4h16v12H7l-3 3zM8 9h8M8 12h5" /> },
+  { href: "/admin/website/content", label: "Website content", needs: "content.view", icon: <Icon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /> },
+  { href: "/admin/website/staff", label: "Staff & roles", needs: "staff.manage", icon: <Icon d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /> },
+  { href: "/admin/website/activity", label: "Activity log", needs: "activity.view", icon: <Icon d="M12 8v4l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9z" /> },
+  { href: "/admin/website/backup", label: "Backup & restore", needs: "backup.manage", icon: <Icon d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /> },
+];
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Content editors, sales staff and viewers get the Website menu only.
+  const user = await getSessionUser({ allowLimitedStaff: true });
+  const staffRole = normalizeStaffRole(user?.staffRole);
+  const fullAccess = can(staffRole, "ops");
+
+  const website = { title: "Website", links: WEBSITE_LINKS.filter((l) => can(staffRole, l.needs)).map(({ needs, ...link }) => link) };
+  const groups = fullAccess
+    ? [OPS_GROUPS[0], OPS_GROUPS[1], OPS_GROUPS[2], website, OPS_GROUPS[3]]
+    : [website, { title: "Records", links: OPS_GROUPS[3].links.filter((l) => l.href === "/admin/account") }];
+
   return (
     <div className="min-h-screen bg-bg text-fg">
       <PortalSidebar
         brand="Admin"
-        homeHref="/admin/dashboard"
-        groups={GROUPS}
-        headerExtra={<PushOptIn label="SOS alerts" />}
+        homeHref={fullAccess ? "/admin/dashboard" : "/admin/website"}
+        groups={groups}
+        headerExtra={fullAccess ? <PushOptIn label="SOS alerts" /> : undefined}
       />
       {/* md:ml-56 matches the sidebar's fixed width so content never sits
           underneath it; on phones there's no sidebar to offset. */}

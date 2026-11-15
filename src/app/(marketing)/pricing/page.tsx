@@ -2,12 +2,10 @@ import type { Metadata } from "next";
 import { listActiveZones } from "@/lib/repo";
 import Reveal from "@/components/marketing/Reveal";
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card } from "@/components/marketing/ui";
+import { getContent } from "@/lib/cms/content";
+import { pageMetadata } from "@/lib/cms/seo";
 
-export const metadata: Metadata = {
-  title: "Pricing — SwiftDrop",
-  description:
-    "Published flat rates by zone. No commission on your sales, no monthly minimum, no surprise line items.",
-};
+export const generateMetadata = (): Promise<Metadata> => pageMetadata("pricing");
 
 /**
  * The zone table reads live rates (including any active surge) straight
@@ -18,44 +16,18 @@ export const dynamic = "force-dynamic";
 
 // Mirrors SERVICE_TYPE_MULTIPLIER in src/lib/pricing.ts so the marketing
 // page can't drift from what the engine actually charges.
-const SERVICES = [
-  {
-    id: "BATCH",
-    name: "Batch",
-    multiplier: 0.7,
-    tagline: "Cheapest per drop",
-    body: "Your parcel joins an optimized multi-stop route. Best for high volume where same-hour isn't critical.",
-    best: "15+ orders a day",
-  },
-  {
-    id: "NEXT_DAY",
-    name: "Next Day",
-    multiplier: 0.85,
-    tagline: "Plan ahead",
-    body: "Booked today, delivered tomorrow inside your chosen window. Non-perishables and catalogue orders.",
-    best: "Retail & e-commerce",
-  },
-  {
-    id: "SAME_DAY",
-    name: "Same Day",
-    multiplier: 1,
-    tagline: "Everyday default",
-    body: "Picked up and delivered today, inside a window you choose — the service most merchants run on.",
-    best: "Pharmacy, retail, gifts",
-    featured: true,
-  },
-  {
-    id: "DIRECT",
-    name: "Direct",
-    multiplier: 1.6,
-    tagline: "Nothing else on board",
-    body: "A courier carries your parcel and nothing else, straight there. Fragile, urgent and VIP orders.",
-    best: "Florists, bakeries, VIP",
-  },
+// The wording for each card comes from the website editor (Website → Pricing
+// page), matched by position. The multipliers are NOT editable there on purpose.
+const SERVICE_RATES = [
+  { id: "BATCH", multiplier: 0.7 },
+  { id: "NEXT_DAY", multiplier: 0.85 },
+  { id: "SAME_DAY", multiplier: 1, featured: true },
+  { id: "DIRECT", multiplier: 1.6 },
 ];
 
 export default async function PricingPage() {
-  const zones = await listActiveZones();
+  const [zones, c] = await Promise.all([listActiveZones(), getContent("pricing")]);
+  const SERVICES = SERVICE_RATES.map((rate, i) => ({ ...rate, ...c.services[i] }));
   // 3 km is a representative city hop — used only to illustrate the rate.
   const sampleDistanceKm = 3;
 
@@ -68,9 +40,9 @@ export default async function PricingPage() {
         <div className="relative mx-auto max-w-6xl px-5 pb-16 pt-20 sm:px-8 sm:pt-24">
           <Reveal>
             <SectionHeading
-              eyebrow={<Eyebrow>Pricing</Eyebrow>}
-              title="The rate card, in public."
-              subtitle="Most couriers make you ask for a quote. Here's exactly what a delivery costs: a zone base rate, plus distance, times your service level. Nothing else."
+              eyebrow={<Eyebrow>{c.heroEyebrow}</Eyebrow>}
+              title={c.heroTitle}
+              subtitle={c.heroSubtitle}
             />
           </Reveal>
         </div>
@@ -89,7 +61,7 @@ export default async function PricingPage() {
                 >
                   {s.featured && (
                     <span className="absolute right-4 top-4 rounded-full bg-accent/20 px-2.5 py-1 text-[11px] font-medium text-accent ring-1 ring-inset ring-accent/30">
-                      Most popular
+                      {c.popularLabel}
                     </span>
                   )}
                   <p className={`whitespace-nowrap text-[12px] uppercase tracking-wider text-fg-subtle ${s.featured ? "pr-24" : ""}`}>
@@ -117,8 +89,8 @@ export default async function PricingPage() {
           <Reveal>
             <SectionHeading
               align="left"
-              title="Live zone rates"
-              subtitle="These are the real rates running in the platform right now — the same numbers the pricing engine uses when it quotes you."
+              title={c.zonesTitle}
+              subtitle={c.zonesSubtitle}
             />
           </Reveal>
 
@@ -174,9 +146,7 @@ export default async function PricingPage() {
 
           <Reveal delay={140}>
             <p className="mt-5 text-[13px] leading-relaxed text-fg-subtle">
-              Prices shown before tax. Surge may apply in severe weather or peak periods — it&apos;s
-              capped, always displayed before you confirm, and the courier&apos;s share rises with
-              it. Volume pricing is available once you&apos;re past roughly 300 deliveries a month.
+              {c.zonesNote}
             </p>
           </Reveal>
         </div>
@@ -186,23 +156,12 @@ export default async function PricingPage() {
       <section className="py-20">
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <Reveal>
-            <SectionHeading title="Everything is included" subtitle="There is no premium tier. Every account gets the whole platform." />
+            <SectionHeading title={c.includedTitle} subtitle={c.includedSubtitle} />
           </Reveal>
 
           <div className="mx-auto mt-12 grid max-w-3xl gap-x-10 gap-y-3 sm:grid-cols-2">
-            {[
-              "Live GPS tracking on every order",
-              "Bilingual tracking pages (EN / FR)",
-              "Photo proof of delivery",
-              "In-app courier ↔ customer chat",
-              "Automatic SMS & email updates",
-              "REST API, webhooks & CSV upload",
-              "Recurring delivery schedules",
-              "Age-verification & cold-chain handling",
-              "Return-to-sender on failed delivery",
-              "Claims & dispute resolution",
-            ].map((item, i) => (
-              <Reveal key={item} delay={i * 35}>
+            {c.included.map((item, i) => (
+              <Reveal key={`${item}-${i}`} delay={i * 35}>
                 <div className="flex items-center gap-3 border-b border-line py-3">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-live" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6 9 17l-5-5" />
@@ -215,8 +174,8 @@ export default async function PricingPage() {
 
           <Reveal delay={120}>
             <div className="mt-14 flex flex-col justify-center gap-3 sm:flex-row">
-              <PrimaryButton href="/signup/merchant">Start delivering</PrimaryButton>
-              <SecondaryButton href="/couriers">Drive with us</SecondaryButton>
+              <PrimaryButton href="/signup/merchant">{c.ctaPrimaryLabel}</PrimaryButton>
+              <SecondaryButton href="/couriers">{c.ctaSecondaryLabel}</SecondaryButton>
             </div>
           </Reveal>
         </div>
