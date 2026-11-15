@@ -1,7 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
-import { Pool, types } from "@neondatabase/serverless";
+import { Pool, types, neonConfig } from "@neondatabase/serverless";
 import { MIGRATIONS } from "@/lib/schema";
+
+if (typeof WebSocket !== "undefined" && !neonConfig.webSocketConstructor) {
+  neonConfig.webSocketConstructor = WebSocket;
+}
 
 /**
  * PostgreSQL database access.
