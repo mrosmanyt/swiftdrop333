@@ -52,6 +52,12 @@ const toNumber = (v: string) => Number(v);
 // ---------------------------------------------------------------------------
 
 function neonDriver(url: string): Driver {
+  try {
+    const u = new URL(url);
+    console.log("[db] neonDriver host:", u.host, "db:", u.pathname);
+  } catch (e) {
+    console.log("[db] neonDriver url parse error");
+  }
   types.setTypeParser(INT8, toNumber);
   types.setTypeParser(NUMERIC, toNumber);
   const pool = new Pool({ connectionString: url, max: Number(process.env.DB_POOL_MAX ?? 5) });

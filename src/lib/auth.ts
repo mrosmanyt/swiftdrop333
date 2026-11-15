@@ -80,6 +80,7 @@ export const authOptions: NextAuthOptions = {
         let user: Awaited<ReturnType<typeof findUserByEmail>>;
         try {
           user = await findUserByEmail(email);
+          console.log("[auth] email:", email, "found:", !!user, "status:", user?.status);
         } catch (e) {
           // A database problem is not a wrong password — say so, and keep
           // the real error in the server log instead of on the sign-in page.
