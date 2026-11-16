@@ -94,6 +94,12 @@ export default async function PricingPage() {
             />
           </Reveal>
 
+          <Reveal delay={60}>
+            <div className="mt-7">
+              <PrimaryButton href="/zones">{c.calcLabel}</PrimaryButton>
+            </div>
+          </Reveal>
+
           <Reveal delay={80}>
             <div className="mt-10 overflow-hidden rounded-2xl border border-line">
               <table className="w-full text-left">

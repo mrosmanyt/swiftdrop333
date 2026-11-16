@@ -38,7 +38,7 @@ export default function MarketingNav({
           <Logo />
         </Link>
 
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-1 lg:flex">
           {LINKS.map((l) => (
             <Link
               key={`${l.href}-${l.label}`}
@@ -50,7 +50,7 @@ export default function MarketingNav({
           ))}
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 lg:flex">
           <ThemeToggle />
           <Link
             href="/login"
@@ -66,7 +66,7 @@ export default function MarketingNav({
           </Link>
         </div>
 
-        <div className="flex items-center gap-1 md:hidden">
+        <div className="flex items-center gap-1 lg:hidden">
           <ThemeToggle />
           <button
             onClick={() => setOpen((v) => !v)}
@@ -82,7 +82,7 @@ export default function MarketingNav({
       </nav>
 
       {open && (
-        <div className="border-t border-line bg-bg/95 px-5 py-4 backdrop-blur-xl md:hidden">
+        <div className="border-t border-line bg-bg/95 px-5 py-4 backdrop-blur-xl lg:hidden">
           <div className="flex flex-col gap-1">
             {LINKS.map((l) => (
               <Link

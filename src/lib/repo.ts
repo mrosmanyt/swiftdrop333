@@ -235,6 +235,14 @@ function mapMerchant(r: any) {
     businessNumber: r.business_number ?? null,
     dailyVolume: r.daily_volume ?? null,
     website: r.website ?? null,
+    businessUnit: r.business_unit ?? null,
+    businessProvince: r.business_province ?? null,
+    businessPostalCode: r.business_postal_code ?? null,
+    industry: r.industry ?? null,
+    referralSource: r.referral_source ?? null,
+    deliveryPattern: r.delivery_pattern ?? null,
+    signupNotes: r.signup_notes ?? null,
+    termsAcceptedAt: r.terms_accepted_at ?? null,
     kybStatus: r.kyb_status,
     kybNotes: r.kyb_notes ?? null,
     rating: r.rating ?? 5,
@@ -260,13 +268,25 @@ export async function createMerchantProfile(input: {
   dailyVolume?: string;
   website?: string;
   kybStatus?: string;
+  businessUnit?: string;
+  businessProvince?: string;
+  businessPostalCode?: string;
+  businessLat?: number | null;
+  businessLng?: number | null;
+  industry?: string;
+  referralSource?: string;
+  deliveryPattern?: string;
+  signupNotes?: string;
+  termsAcceptedAt?: string;
 }) {
   const profileId = id();
   await db.prepare(
     `INSERT INTO merchant_profiles
        (id, user_id, business_name, contact_name, business_phone, business_address,
-        business_city, business_number, daily_volume, website, kyb_status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        business_city, business_number, daily_volume, website, kyb_status, created_at,
+        business_unit, business_province, business_postal_code, business_lat, business_lng,
+        industry, referral_source, delivery_pattern, signup_notes, terms_accepted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     profileId,
     input.userId,
@@ -279,7 +299,17 @@ export async function createMerchantProfile(input: {
     input.dailyVolume ?? null,
     input.website ?? null,
     input.kybStatus ?? "pending",
-    now()
+    now(),
+    input.businessUnit ?? null,
+    input.businessProvince ?? null,
+    input.businessPostalCode ?? null,
+    input.businessLat ?? null,
+    input.businessLng ?? null,
+    input.industry ?? null,
+    input.referralSource ?? null,
+    input.deliveryPattern ?? null,
+    input.signupNotes ?? null,
+    input.termsAcceptedAt ?? null
   );
   return profileId;
 }

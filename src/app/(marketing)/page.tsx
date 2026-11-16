@@ -17,7 +17,9 @@ export const generateMetadata = (): Promise<Metadata> => pageMetadata("home");
  * returns the original text from src/lib/cms/defaults.ts.
  */
 export default async function HomePage() {
-  const [c, faq] = await Promise.all([getContent("home"), getContent("faq")]);
+  const [c, faq, reviewsContent] = await Promise.all([getContent("home"), getContent("faq"), getContent("reviews")]);
+  // Real customer reviews, added in the admin console. Hidden until there is at least one.
+  const reviews = visible(reviewsContent.items).filter((r) => r.quote.trim());
   const CITIES = c.cities;
   // Small feature cards are laid out three to a row on a six-column grid.
   const featCards = visible(c.featCards);
@@ -275,6 +277,33 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ───────────────────────── Reviews (only when some have been added) ───────────────────────── */}
+      {reviews.length > 0 && (
+        <section className="border-t border-line pb-24 pt-20 sm:pb-28">
+          <div className="mx-auto max-w-6xl px-5 sm:px-8">
+            <Reveal>
+              <SectionHeading title={reviewsContent.title} subtitle={reviewsContent.subtitle || undefined} />
+            </Reveal>
+            <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {reviews.map((r, i) => (
+                <Reveal key={`${r.business}-${i}`} delay={(i % 3) * 70}>
+                  <Card className="flex h-full flex-col">
+                    {r.industry && (
+                      <p className="text-[11.5px] font-semibold uppercase tracking-wider text-accent">{r.industry}</p>
+                    )}
+                    <blockquote className="mt-3 text-[14.5px] leading-relaxed text-fg/85">“{r.quote}”</blockquote>
+                    <p className="mt-auto pt-5 text-[13.5px]">
+                      <span className="font-semibold text-fg">{r.business}</span>
+                      {r.name && <span className="text-fg-subtle"> · {r.name}</span>}
+                    </p>
+                  </Card>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ───────────────────────── FAQ ───────────────────────── */}
       <section className="pb-24 sm:pb-28">

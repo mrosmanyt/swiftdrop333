@@ -89,6 +89,13 @@ the website, **Delete** removes it, **+ Add** makes a new one.
 | **Pricing page** | Headings, the four service cards (wording only), the note under the rates table, the "included" list. |
 | **Drive with us page** | Headline, reasons to drive, tiers, requirements, the apply box. |
 | **Questions (FAQ)** | The questions and answers on the homepage. |
+| **Products page** | The four services (Next Day, Same Day, Direct, Batch) and the "included with every delivery" cards. |
+| **Industries page** | The list of industries you deliver for, with their notes (for example "ID check required"). |
+| **Cities page** | The wording for each city. (The map and the price calculator use a fixed list of eight cities in `src/lib/site/canada.ts`.) |
+| **How it works page** | The numbered steps, tracking and notifications, and the "Good to know" box. |
+| **Zone price calculator** | Wording on `/zones`. The prices come from **Zones & pricing**. |
+| **Customer reviews** | Reviews on the homepage. Hidden while empty. Only add real reviews you have permission to publish. |
+| **Terms of Service** | Your terms. Have a Canadian lawyer review them. |
 | **Contact page** | Wording on the contact page and the list of enquiry types. |
 | **Privacy page** | Your privacy notice. Have a lawyer check changes. |
 | **Menu, footer & contact details** | Top menu links, footer text, phone, WhatsApp, email, address, map link, opening hours, social links. |
@@ -185,3 +192,39 @@ menu); `session.ts`, `auth.ts`, `middleware.ts`, `repo.ts` (staff roles);
   never overwritten.
 - Page views older than about 13 months are removed automatically.
 - The Excel download is a `.csv` file. Excel and Google Sheets open it directly.
+
+---
+
+## 8. Zone price calculator (`/zones`)
+
+A visitor chooses a service, enters a pickup address and sees every delivery
+zone around it with a price, on a list and on a map. They can also enter a
+drop-off address to price one delivery.
+
+- **A zone is a distance band** around the pickup address: Zone 1 is 0–3 km,
+  Zone 2 is 3–6 km, and so on, up to the edge of the city's service area.
+- **Prices are not typed in anywhere.** They are worked out by the same
+  pricing engine that prices real orders, from the rates in
+  **Zones & pricing**. The calculator cannot show a price you do not charge.
+- **Set a rate for each of your eight cities** in Zones & pricing. A city
+  with no rate uses a built-in standard rate ($11.90 base + $0.35 per km) in
+  the calculator only — real orders still need a rate to exist.
+- Cities, their map positions and how far out you deliver are in
+  `src/lib/site/canada.ts`; zone width and count are in `src/lib/site/zones.ts`.
+
+## 9. Business sign-up (`/signup/merchant`)
+
+The form now collects a full Canadian pickup address (unit, city, province,
+postal code) with a map, the industry, how deliveries go out, how they heard
+about you, and a required tick for the Terms of Service. All of it shows in
+**Applications** when you review the business.
+
+## 10. When your domain is ready
+
+- Add the domain in Vercel → Settings → Domains, and set `NEXTAUTH_URL` and
+  `NEXT_PUBLIC_APP_URL` to it.
+- Put your `support@yourdomain` address in Website → Menu, footer & contact
+  details → **Email address**. It then appears in the footer, on the Contact
+  page and at the bottom of the Terms.
+- `merchant.` and `courier.` subdomains can be pointed at the sign-up pages
+  at that time; until then they are `/signup/merchant` and `/signup/courier`.

@@ -17,7 +17,7 @@ const inputBase =
   "w-full rounded-xl border bg-bg px-3.5 py-2.5 text-[14.5px] leading-6 text-fg " +
   "placeholder:text-fg-subtle outline-none transition disabled:opacity-60";
 
-function inputClass(error?: string | null) {
+export function inputClass(error?: string | null) {
   return `${inputBase} ${
     error
       ? "border-danger focus:border-danger focus:ring-4 focus:ring-danger/10"

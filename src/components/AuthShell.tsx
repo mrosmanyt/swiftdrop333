@@ -12,12 +12,15 @@ export default function AuthShell({
   children,
   footer,
   width = "sm",
+  bare = false,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  width?: "sm" | "lg";
+  width?: "sm" | "lg" | "xl";
+  /** true = the page lays out its own cards (used by the two-column business sign-up). */
+  bare?: boolean;
 }) {
   return (
     <div className="themed-root relative min-h-screen bg-bg text-fg">
@@ -33,7 +36,7 @@ export default function AuthShell({
 
       <main
         className={`relative mx-auto px-5 pb-20 pt-6 sm:px-8 ${
-          width === "lg" ? "max-w-xl" : "max-w-md"
+          width === "xl" ? "max-w-6xl" : width === "lg" ? "max-w-xl" : "max-w-md"
         }`}
       >
         <div className="mb-6">
@@ -41,7 +44,7 @@ export default function AuthShell({
           {subtitle && <p className="mt-2 text-[14.5px] leading-relaxed text-fg-muted">{subtitle}</p>}
         </div>
 
-        <div className="card-shadow rounded-2xl border border-line bg-surface p-6">{children}</div>
+        {bare ? children : <div className="card-shadow rounded-2xl border border-line bg-surface p-6">{children}</div>}
 
         {footer && <div className="mt-5 text-sm text-fg-muted">{footer}</div>}
       </main>

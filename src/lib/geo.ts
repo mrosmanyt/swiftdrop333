@@ -19,6 +19,10 @@ export interface AddressSuggestion {
   lng: number;
   city?: string;
   postcode?: string;
+  /** Province / state name when the provider gives one (e.g. "Ontario"). */
+  state?: string;
+  /** Street line only ("321 Duncairn Avenue"), when the provider gives one. */
+  street?: string;
 }
 
 const PROVIDER = process.env.GEOCODER ?? "photon";
@@ -93,8 +97,10 @@ async function searchPhoton(query: string, bias?: { lat: number; lng: number }) 
         label: line,
         lat: f.geometry.coordinates[1],
         lng: f.geometry.coordinates[0],
-        city: p.city,
+        city: p.city ?? p.district,
         postcode: p.postcode,
+        state: p.state,
+        street: [p.housenumber, p.street].filter(Boolean).join(" ") || undefined,
       };
     })
     .filter((s: AddressSuggestion) => s.label.length > 0);
@@ -118,6 +124,8 @@ async function searchNominatim(query: string) {
       lng: Number(r.lon),
       city: r.address?.city ?? r.address?.town,
       postcode: r.address?.postcode,
+      state: r.address?.state,
+      street: [r.address?.house_number, r.address?.road].filter(Boolean).join(" ") || undefined,
     })
   );
 }

@@ -27,7 +27,7 @@ export function deviceOf(userAgent: string): "mobile" | "tablet" | "desktop" {
   return "desktop";
 }
 
-const PUBLIC_PATHS = /^\/(|features|pricing|couriers|privacy|contact|signup(\/(merchant|courier|customer))?|login)$/;
+const PUBLIC_PATHS = /^\/(|features|pricing|couriers|privacy|contact|products|zones|cities|industries|how-it-works|terms|signup(\/(merchant|courier|customer))?|login)$/;
 
 export async function recordPageView(input: { path: string; referrer: string; ip: string; userAgent: string; host: string }) {
   if (!input.userAgent || BOT.test(input.userAgent)) return false;

@@ -5,30 +5,33 @@ import { getContent, safeHref } from "@/lib/cms/content";
 
 const COLUMNS = [
   {
-    title: "Platform",
+    title: "Products",
     links: [
-      { href: "/#how", label: "How it works" },
+      { href: "/products", label: "Next Day" },
+      { href: "/products", label: "Same Day" },
+      { href: "/products", label: "Direct" },
+      { href: "/products", label: "Batch" },
       { href: "/features", label: "Features" },
-      { href: "/pricing", label: "Pricing" },
-      { href: "/#coverage", label: "Where we deliver" },
     ],
   },
   {
     title: "For business",
     links: [
+      { href: "/how-it-works", label: "How SwiftDrop works" },
+      { href: "/pricing", label: "Pricing" },
+      { href: "/zones", label: "Zone price calculator" },
+      { href: "/industries", label: "Industries" },
       { href: "/signup/merchant", label: "Start delivering" },
-      { href: "/merchant/tools", label: "API & webhooks" },
-      { href: "/pricing", label: "Rate card" },
       { href: "/login", label: "Merchant sign in" },
     ],
   },
   {
-    title: "For couriers",
+    title: "SwiftDrop",
     links: [
+      { href: "/cities", label: "Cities" },
       { href: "/couriers", label: "Drive with SwiftDrop" },
-      { href: "/signup/courier", label: "Apply now" },
-      { href: "/couriers#tiers", label: "Courier+ tiers" },
-      { href: "/login", label: "Courier sign in" },
+      { href: "/signup/courier", label: "Apply as a courier" },
+      { href: "/contact", label: "Contact" },
     ],
   },
 ];
@@ -131,7 +134,9 @@ export default async function MarketingFooter() {
             <Link href="/privacy" className="transition-colors hover:text-fg">
               Privacy
             </Link>
-            <span>Terms</span>
+            <Link href="/terms" className="transition-colors hover:text-fg">
+              Terms of service
+            </Link>
             <span>Courier agreement</span>
             <span>Accessibility</span>
             <ThemeToggle className="h-8 w-8" />

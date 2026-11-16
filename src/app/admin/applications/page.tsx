@@ -38,6 +38,16 @@ export default async function AdminApplicationsPage() {
               { label: "Business number", value: m!.businessNumber ?? "—" },
               { label: "Daily volume", value: m!.dailyVolume ? `${m!.dailyVolume} parcels/day` : "—" },
               { label: "Website", value: m!.website ?? "—" },
+              {
+                label: "Province / postal code",
+                value: [m!.businessProvince, m!.businessPostalCode].filter(Boolean).join(" · ") || "—",
+              },
+              { label: "Unit", value: m!.businessUnit ?? "—" },
+              { label: "Industry", value: m!.industry ?? "—" },
+              { label: "Deliveries go out", value: m!.deliveryPattern ?? "—" },
+              { label: "Heard about us", value: m!.referralSource ?? "—" },
+              { label: "Notes from applicant", value: m!.signupNotes ?? "—" },
+              { label: "Terms accepted", value: m!.termsAcceptedAt ? m!.termsAcceptedAt.slice(0, 10) : "—" },
               { label: "Applied", value: new Date(m!.createdAt).toLocaleDateString() },
             ]}
             documents={await listDocuments("merchant", m!.id)}

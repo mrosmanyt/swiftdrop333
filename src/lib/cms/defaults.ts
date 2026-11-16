@@ -13,7 +13,7 @@
 export const DEFAULTS = {
   // ------------------------------------------------------------------ home
   home: {
-    heroBadge: "Live in 10 Canadian cities",
+    heroBadge: "Live in 8 Canadian cities",
     heroLine1: "Same-day delivery",
     heroLine2: "they can watch arrive.",
     heroText:
@@ -83,18 +83,7 @@ export const DEFAULTS = {
       "Not a mockup — a real screen from the platform, showing live deliveries, their status and what each one cost.",
     shotButtonLabel: "See every feature",
     coverageTitle: "Delivering across Canada",
-    cities: [
-      "Toronto",
-      "Vancouver",
-      "Montréal",
-      "Calgary",
-      "Ottawa",
-      "Edmonton",
-      "Winnipeg",
-      "Hamilton",
-      "Mississauga",
-      "Québec City",
-    ],
+    cities: ["Calgary", "Edmonton", "Hamilton", "Oshawa", "Ottawa", "Toronto", "Vancouver", "Winnipeg"],
     courierEyebrow: "For couriers",
     courierTitle: "Keep 72% of the fee. Know the pay before you accept.",
     courierText:
@@ -265,6 +254,7 @@ export const DEFAULTS = {
     zonesTitle: "Live zone rates",
     zonesSubtitle:
       "These are the real rates running in the platform right now — the same numbers the pricing engine uses when it quotes you.",
+    calcLabel: "Check the price for your address",
     zonesNote:
       "Prices shown before tax. Surge may apply in severe weather or peak periods — it's capped, always displayed before you confirm, and the courier's share rises with it. Volume pricing is available once you're past roughly 300 deliveries a month.",
     includedTitle: "Everything is included",
@@ -444,9 +434,11 @@ export const DEFAULTS = {
   // ------------------------------------------- site-wide: nav, footer, contact
   site: {
     navLinks: [
-      { label: "How it works", href: "/#how" },
-      { label: "Features", href: "/features" },
+      { label: "Products", href: "/products" },
       { label: "Pricing", href: "/pricing" },
+      { label: "Cities", href: "/cities" },
+      { label: "Industries", href: "/industries" },
+      { label: "How it works", href: "/how-it-works" },
       { label: "Drive with us", href: "/couriers" },
     ],
     navSignInLabel: "Sign in",
@@ -469,7 +461,7 @@ export const DEFAULTS = {
     linkedin: "",
     tiktok: "",
     youtube: "",
-    showContactLink: false,
+    showContactLink: true,
   },
 
   // ---------------------------------------------------------- contact page
@@ -478,7 +470,7 @@ export const DEFAULTS = {
     title: "Talk to our team",
     intro:
       "Questions about pricing, coverage or connecting your store? Send us a message and a real person will get back to you.",
-    types: ["Business delivery", "Become a courier", "Partnership", "Something else"],
+    types: ["I want to ship with SwiftDrop", "I want to drive for SwiftDrop", "Partnership", "Something else"],
     buttonLabel: "Send message",
     successTitle: "Thanks — we've got it.",
     successText: "Someone from our team will reply as soon as possible, usually within one business day.",
@@ -535,6 +527,251 @@ export const DEFAULTS = {
     contactTitle: "Contact — SwiftDrop",
     contactDescription: "Get in touch with the SwiftDrop team about delivery for your business.",
     contactImage: "",
+  },
+
+  // -------------------------------------------------------------- products
+  products: {
+    eyebrow: "Products",
+    title: "Four ways to deliver. Pick per order.",
+    subtitle:
+      "Delivery isn't one size fits all. Choose the speed and price that suits each parcel — you can mix them freely, order by order.",
+    items: [
+      {
+        icon: "calendar",
+        name: "Next Day",
+        tagline: "Our most affordable scheduled option",
+        body: "Book by the evening cut-off and it is picked up and delivered the next day, inside the window you choose. Ideal for catalogue orders and anything that isn't perishable.",
+        points: ["Lowest scheduled price", "Morning, midday, afternoon or evening window", "Live tracking and photo proof included"],
+      },
+      {
+        icon: "pulse",
+        name: "Same Day",
+        tagline: "The everyday default",
+        body: "Picked up and delivered today. The balance of speed and price most local shops run on.",
+        points: ["Collected and delivered the same day", "Customer gets a live map and ETA", "Text and email updates at every step"],
+      },
+      {
+        icon: "pin",
+        name: "Direct",
+        tagline: "Straight there, nothing else on board",
+        body: "A courier carries your parcel and nothing else, from your counter to the door. For urgent, fragile and VIP orders.",
+        points: ["Fastest option", "One parcel, one courier, one trip", "Best for flowers, cakes and urgent items"],
+      },
+      {
+        icon: "batch",
+        name: "Batch",
+        tagline: "Cheapest per drop",
+        body: "Send many parcels at once. We group nearby drop-offs into one optimised route, which brings the price of each delivery down.",
+        points: ["Lowest price per delivery", "Upload a CSV or use the API", "Built for subscription boxes and weekly runs"],
+      },
+    ],
+    includedTitle: "Included with every delivery",
+    included: [
+      { icon: "code", title: "Generated labels", body: "Print every delivery label you need in one click." },
+      { icon: "pin", title: "Real-time tracking", body: "You and your customer always know where the parcel is." },
+      { icon: "camera", title: "Proof of delivery", body: "A timestamped photo at the door, by default." },
+      { icon: "id", title: "ID checks when needed", body: "Age-restricted orders can't be completed without one." },
+    ],
+    ctaTitle: "Start delivering today",
+    ctaText: "Offer local delivery and bring the in-store experience to your customer's door.",
+    ctaLabel: "Create a business account",
+  },
+
+  // ------------------------------------------------------------ industries
+  industries: {
+    eyebrow: "Industries",
+    title: "Built for the shops on your street",
+    subtitle: "If it fits in a car and it's legal to deliver, we can probably take it. These are the businesses we work with most.",
+    items: [
+      { icon: "basket", name: "Grocery", body: "Fresh, chilled and pantry orders delivered the same day, with cold-chain handling flagged to the courier before pickup.", note: "" },
+      { icon: "cake", name: "Bakery", body: "Cakes and pastries travel on Direct, so nothing else is stacked on top and they arrive the way they left.", note: "" },
+      { icon: "box", name: "Meal prep", body: "Weekly meal boxes go out together on Batch routes, grouped by neighbourhood to keep the price per drop low.", note: "" },
+      { icon: "flower", name: "Florist", body: "Bouquets delivered upright and on time, with a photo so you can show the sender it arrived.", note: "" },
+      { icon: "bag", name: "Retail", body: "Give local customers the option of delivery today instead of a trip to the store or a week in the post.", note: "" },
+      { icon: "paw", name: "Pet store", body: "Food, litter and supplies delivered to the door, on a schedule or on demand.", note: "" },
+      { icon: "glass", name: "Alcohol", body: "The courier checks government photo ID at the door and the delivery cannot be completed without it.", note: "ID check required · where provincial rules allow" },
+      { icon: "pill", name: "Pharmacy", body: "Prescriptions handed to the right person, with ID or signature when you require it and a return to you if nobody is home.", note: "ID or signature on request" },
+      { icon: "leaf", name: "Vape & tobacco", body: "Age-verified delivery with a recorded ID check for every order.", note: "ID check required · where provincial rules allow" },
+    ],
+    ctaTitle: "Don't see your industry?",
+    ctaText: "Tell us what you send and we'll tell you honestly whether we're a good fit.",
+    ctaLabel: "Talk to our team",
+  },
+
+  // ---------------------------------------------------------------- cities
+  cities: {
+    eyebrow: "Cities",
+    title: "Where SwiftDrop delivers",
+    subtitle: "We operate in Canada only. Most deliveries stay inside the city, with some routes reaching the surrounding area.",
+    // Names must match the eight service cities; the map positions are fixed in code.
+    items: [
+      { name: "Toronto", province: "Ontario", body: "The city of Toronto and the nearby parts of the GTA." },
+      { name: "Ottawa", province: "Ontario", body: "Ottawa and the surrounding communities." },
+      { name: "Hamilton", province: "Ontario", body: "Hamilton and the surrounding communities." },
+      { name: "Oshawa", province: "Ontario", body: "Oshawa and nearby Durham Region." },
+      { name: "Vancouver", province: "British Columbia", body: "Vancouver and the nearby parts of Metro Vancouver." },
+      { name: "Calgary", province: "Alberta", body: "Calgary and the area around it." },
+      { name: "Edmonton", province: "Alberta", body: "Edmonton and the area around it." },
+      { name: "Winnipeg", province: "Manitoba", body: "Winnipeg and the area around it." },
+    ],
+    note: "Not in one of these cities yet? Tell us where you are — demand decides where we open next.",
+    ctaLabel: "Check prices for your address",
+  },
+
+  // ---------------------------------------------------------- how it works
+  howItWorks: {
+    eyebrow: "How SwiftDrop works",
+    title: "From sign-up to your first delivery",
+    subtitle: "Five steps. Most businesses are sending the same day they are approved.",
+    steps: [
+      { title: "Create your account", body: "Tell us about your business and where couriers should collect. It takes about five minutes." },
+      { title: "Get verified", body: "We check every business before its first delivery — usually in less than one working day." },
+      { title: "Book a delivery", body: "Enter the drop-off address, pick a service and a time window. You see the price before you confirm." },
+      { title: "Pack and label", body: "Print the label, attach it to the parcel and have it ready at the pickup address." },
+      { title: "We pick up and deliver", body: "A courier collects it and takes it to the door. You and your customer follow it live." },
+    ],
+    trackingTitle: "Tracking & notifications",
+    tracking: [
+      { title: "Tracking", body: "Your customer gets a link to a live tracking page by text and email. It shows the parcel from pickup to their door." },
+      { title: "Notifications", body: "We tell your customer when the parcel is picked up, when the courier is close, and when it has been delivered." },
+    ],
+    crucialTitle: "Good to know",
+    crucial: [
+      { title: "Photo proof", body: "A photo is taken at the door for every delivery that doesn't need an ID check." },
+      { title: "ID-checked delivery", body: "For age-restricted orders the courier records a government photo ID check in person before handing over the parcel." },
+      { title: "Returns", body: "If a parcel can't legally be left unattended and nobody is there to receive it, it comes back to you." },
+      { title: "Parcel size", body: "A single parcel can weigh up to 9 kg and must fit safely in an ordinary car. Several parcels can go on one delivery, each with its own label." },
+    ],
+    ctaTitle: "Ready when you are",
+    ctaLabel: "Create a business account",
+  },
+
+  // ----------------------------------------------------------------- zones
+  zones: {
+    eyebrow: "Delivery zones",
+    title: "See the price for your address",
+    subtitle: "Prices depend on how far the parcel travels and the service you pick. Enter your pickup address to see every zone and its price.",
+    note: "Zones are measured from your pickup address. Zone 1 is the closest and the lowest price; higher zones are further away. Prices are estimates before tax — the exact price is always shown before you confirm a delivery.",
+    outsideText: "That address is outside our current service areas. We deliver in Calgary, Edmonton, Hamilton, Oshawa, Ottawa, Toronto, Vancouver and Winnipeg.",
+  },
+
+  // --------------------------------------------------------------- reviews
+  // Real customer reviews only. Empty by default: the section stays hidden
+  // on the website until you add reviews you have permission to publish.
+  reviews: {
+    title: "What local businesses say",
+    subtitle: "",
+    items: [] as { name: string; business: string; industry: string; quote: string }[],
+  },
+
+  // ----------------------------------------------------------------- terms
+  terms: {
+    title: "Terms of Service",
+    intro: "What you need to know about using SwiftDrop.",
+    updated: "November 15, 2026",
+    sections: [
+      {
+        h: "1. About these terms",
+        p: [
+          "These Terms of Service are an agreement between SwiftDrop and the business or person using the SwiftDrop website, web portal and delivery services (together, the \"Service\"). By creating an account or booking a delivery you agree to them. If you do not agree, please do not use the Service.",
+          "SwiftDrop operates in Canada only. These terms are governed by the laws of the province in which SwiftDrop is registered and the federal laws of Canada that apply there.",
+        ],
+      },
+      {
+        h: "2. Your account",
+        p: [
+          "You must give accurate information when you sign up and keep it up to date. We verify every business before its first delivery and may ask for documents to do so.",
+          "You are responsible for everything done under your account. Keep your password private and tell us straight away if you think someone else has used it.",
+        ],
+      },
+      {
+        h: "3. Booking deliveries",
+        p: [
+          "The price of each delivery is shown before you confirm it. It is based on your pickup address, the delivery zone and the service you choose. Taxes are added where they apply.",
+          "A booking is confirmed when you submit it. Delivery windows are estimates, not guarantees: traffic, weather and other things outside our control can cause delays.",
+        ],
+      },
+      {
+        h: "4. Packaging",
+        p: [
+          "Every parcel must be closed, labelled with its SwiftDrop label and ready at the pickup address at the start of the pickup window. A single parcel may weigh up to 9 kg and must fit safely in the trunk or back seat of an ordinary car.",
+          "Perishable items must be in a sealed, insulated container suitable for the whole delivery window. Fragile items must be in a rigid outer box with cushioning on all sides. Liquids must be fully contained so they cannot leak.",
+          "A courier may refuse a parcel that does not meet these rules. A cancellation fee may apply to refused parcels.",
+        ],
+      },
+      {
+        h: "5. Restricted and prohibited items",
+        p: [
+          "Alcohol, pharmacy items and vape or tobacco products may only be sent where the law of the province allows it and only with ID verification switched on for that order. The recipient must show valid government photo ID. If they cannot, the parcel is returned to you and a return fee applies. You are responsible for holding any licence your business needs to sell and deliver these products.",
+          "You may not send anything illegal, hazardous or dangerous. This includes, without limit, explosives, flammable or toxic materials, weapons, live animals, cash and anything that needs a special permit to transport. Ask us before sending if you are not sure.",
+        ],
+      },
+      {
+        h: "6. Accurate delivery information",
+        p: [
+          "You are responsible for giving a complete and correct delivery address: street number, street name, unit or suite if there is one, city and postal code. We do not check addresses for you. We do not deliver to PO boxes.",
+          "A phone number and an email address for the recipient are needed so the courier can reach them and so we can send tracking updates. A delivery cannot go ahead without both.",
+          "If a delivery fails because the information you gave was wrong or incomplete, return or redelivery fees apply and SwiftDrop is not responsible for the resulting loss or delay.",
+        ],
+      },
+      {
+        h: "7. Delivery, proof and failed deliveries",
+        p: [
+          "Unless an order needs an ID check or a signature, the courier may leave the parcel at the door and take a photo as proof of delivery. That photo, with its time and location, is the record that the delivery was completed.",
+          "If nobody is available for a delivery that must be handed over in person, the courier will try to contact the recipient. If that fails, the parcel is returned to you at the same rate as the original delivery.",
+        ],
+      },
+      {
+        h: "8. Cancellations and changes",
+        p: [
+          "You can cancel a delivery without charge until a courier has been assigned to it. After that, a cancellation fee may apply, and once the parcel has been picked up the delivery cannot be cancelled — only returned.",
+        ],
+      },
+      {
+        h: "9. Payment",
+        p: [
+          "You agree to pay for every delivery booked under your account, together with any fees described in these terms. Charges are billed to the payment method on your account. Unpaid amounts may lead to your account being paused.",
+        ],
+      },
+      {
+        h: "10. Lost or damaged parcels",
+        p: [
+          "If a parcel is lost or damaged while it is in our care, tell us within 7 days of the delivery date and include photos where you can. After we have looked into it, our responsibility is limited to the lower of the item's proven cost to you or $100 per delivery, unless a higher amount has been agreed with us in writing beforehand.",
+          "We are not responsible for loss or damage caused by packaging that does not meet section 4, by incorrect information, by prohibited items, or by events outside our reasonable control.",
+        ],
+      },
+      {
+        h: "11. Using the Service fairly",
+        p: [
+          "Do not misuse the Service: no false bookings, no attempts to get around our systems or security, no harassment of couriers or staff, and no use of the Service for anything unlawful. Couriers are independent and must be treated with respect.",
+          "We may suspend or close an account that breaks these terms, puts a courier at risk, or is used fraudulently.",
+        ],
+      },
+      {
+        h: "12. Privacy",
+        p: [
+          "We handle personal information as described in our Privacy page. When you give us your customers' details for a delivery, you confirm that you are allowed to share them with us for that purpose.",
+        ],
+      },
+      {
+        h: "13. Limits on our responsibility",
+        p: [
+          "The Service is provided as it is. To the extent the law allows, SwiftDrop is not liable for indirect or consequential losses such as lost profits or lost business, and our total liability for any one delivery is limited as set out in section 10. Nothing in these terms removes rights you have under Canadian law that cannot be excluded.",
+        ],
+      },
+      {
+        h: "14. Changes to these terms",
+        p: [
+          "We may update these terms from time to time. We will post the new version here and change the date at the top. If a change is significant we will tell account holders by email. Continuing to use the Service after a change means you accept the updated terms.",
+        ],
+      },
+      {
+        h: "15. Contact",
+        p: [
+          "Questions about these terms? Reach our support team through the Contact page on this website.",
+        ],
+      },
+    ],
   },
 
   // ---------------------------------------- email alerts (never sent to the browser)
