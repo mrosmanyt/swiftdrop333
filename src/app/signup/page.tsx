@@ -4,6 +4,7 @@ import AuthShell from "@/components/AuthShell";
 export default function SignupChoicePage() {
   return (
     <AuthShell
+      photo="authJoin"
       title="Join SwiftDrop"
       subtitle="Tell us how you want to use SwiftDrop."
       width="lg"

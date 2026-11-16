@@ -144,6 +144,7 @@ function CustomerSignupForm() {
 
   return (
     <AuthShell
+      photo="authCustomer"
       title="Create your account"
       subtitle="Track every delivery sent to you, save addresses, and earn loyalty points."
       footer={

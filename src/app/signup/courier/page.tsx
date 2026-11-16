@@ -120,6 +120,7 @@ function CourierSignupForm() {
 
   return (
     <AuthShell
+      photo="authCourier"
       title="Courier application"
       subtitle="After this you'll upload your documents. Our team reviews every application before you can go online."
       width="lg"

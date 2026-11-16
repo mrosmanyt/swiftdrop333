@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/marketing/Reveal";
+import { CardPhoto } from "@/components/marketing/SitePhoto";
+import type { SiteImageKey } from "@/lib/site/images";
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card, Icon } from "@/components/marketing/ui";
 import { iconPath } from "@/components/marketing/icons";
 import { getContent, visible } from "@/lib/cms/content";
@@ -7,6 +9,19 @@ import { getContent, visible } from "@/lib/cms/content";
 export const metadata: Metadata = {
   title: "Industries — local delivery for Canadian shops | SwiftDrop",
   description: "Grocery, bakery, meal prep, florist, retail, pet, alcohol, pharmacy and more — delivered locally with live tracking.",
+};
+
+/** Photo for each industry card, matched by the card's icon. */
+const INDUSTRY_PHOTOS: Record<string, SiteImageKey> = {
+  basket: "industryGrocery",
+  cake: "industryBakery",
+  box: "industryMealPrep",
+  flower: "industryFlorist",
+  bag: "industryRetail",
+  paw: "industryPet",
+  glass: "industryAlcohol",
+  pill: "industryPharmacy",
+  leaf: "industryVape",
 };
 
 /** Wording: admin console → Website → Industries page. */
@@ -29,6 +44,7 @@ export default async function IndustriesPage() {
           {visible(c.items).map((it, i) => (
             <Reveal key={`${it.name}-${i}`} delay={(i % 3) * 70}>
               <Card className="flex h-full flex-col">
+                <CardPhoto name={INDUSTRY_PHOTOS[it.icon]} />
                 <Icon path={iconPath(it.icon)} />
                 <h2 className="text-[18px] font-semibold tracking-tight">{it.name}</h2>
                 <p className="mt-2 text-[14px] leading-relaxed text-fg-muted">{it.body}</p>

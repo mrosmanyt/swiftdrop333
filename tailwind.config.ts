@@ -18,9 +18,9 @@ const config: Config = {
       colors: {
         // Legacy portal brand colours (merchant/driver/admin screens)
         brand: {
-          DEFAULT: "#0F62FE",
-          dark: "#0043CE",
-          light: "#D0E2FF",
+          DEFAULT: "#0B5D45",
+          dark: "#0B4937",
+          light: "#D6EBDF",
         },
         // Semantic, theme-aware tokens used by the public site
         bg: token("--bg"),
@@ -38,6 +38,11 @@ const config: Config = {
           solid: token("--accent-solid"),
         },
         live: token("--live"),
+        sun: token("--sun"),
+        "sun-ink": token("--sun-ink"),
+        panel: token("--panel"),
+        "panel-fg": token("--panel-fg"),
+        "panel-muted": token("--panel-muted"),
         inverse: token("--inverse"),
         "inverse-fg": token("--inverse-fg"),
         // Status colours: `x` for text/icons, `x-soft` for tinted panels,
@@ -58,7 +63,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
-          "var(--font-sans)",
+          "var(--font-archivo)",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
@@ -68,7 +73,7 @@ const config: Config = {
         ],
       },
       letterSpacing: {
-        tightest: "-0.045em",
+        tightest: "-0.015em",
       },
       keyframes: {
         "fade-up": {

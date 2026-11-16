@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/marketing/Reveal";
 import ScreenShot from "@/components/marketing/ScreenShot";
+import SitePhoto, { hasPhoto } from "@/components/marketing/SitePhoto";
 import {
   Eyebrow,
   SectionHeading,
@@ -71,6 +72,17 @@ export default async function FeaturesPage() {
           </Reveal>
         </div>
       </section>
+
+      {/* Photo band (src/lib/site/images.ts → featuresBand) */}
+      {hasPhoto("featuresBand") && (
+        <section className="px-3 pb-8 sm:px-5">
+          <Reveal>
+            <div className="relative mx-auto aspect-[16/9] max-w-[1400px] overflow-hidden rounded-[28px] bg-panel sm:aspect-[21/8]">
+              <SitePhoto name="featuresBand" alt="A delivery route traced across a city at night" priority sizes="(min-width: 1400px) 1400px, 100vw" />
+            </div>
+          </Reveal>
+        </section>
+      )}
 
       {/* Alternating feature blocks */}
       {BLOCKS.map((b, i) => (

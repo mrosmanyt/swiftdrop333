@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/marketing/Reveal";
+import SitePhoto, { CardPhoto, hasPhoto } from "@/components/marketing/SitePhoto";
+import type { SiteImageKey } from "@/lib/site/images";
+
+/** Photo for each "why drive" card, matched by the card's icon. */
+const WHY_PHOTOS: Record<string, SiteImageKey> = { dollar: "courierWhy72", wallet: "courierWhyCashout", calendar: "courierWhyPay" };
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card, Icon } from "@/components/marketing/ui";
 import { iconPath } from "@/components/marketing/icons";
 import { getContent, visible } from "@/lib/cms/content";
@@ -49,9 +54,21 @@ export default async function CouriersPage() {
               </Reveal>
             </div>
 
-            {/* Offer card mock */}
+            {/* Offer card mock — over a photo when one is supplied
+                (src/lib/site/images.ts → couriersHero) */}
             <Reveal delay={200}>
-              <div className="animate-float">
+              <div className={hasPhoto("couriersHero") ? "relative pb-10 sm:pb-0" : ""}>
+                {hasPhoto("couriersHero") && (
+                  <div className="relative aspect-[4/5] overflow-hidden rounded-[28px] bg-panel sm:aspect-[4/4.4]">
+                    <SitePhoto name="couriersHero" alt="A SwiftDrop courier checking the next drop beside his car" priority sizes="(min-width: 1024px) 45vw, 100vw" className="object-[78%_center]" />
+                    <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[rgb(6_32_25/0.55)] via-transparent to-transparent" />
+                  </div>
+                )}
+              <div
+                className={`animate-float ${
+                  hasPhoto("couriersHero") ? "absolute inset-x-3 -bottom-2 sm:inset-x-auto sm:-left-8 sm:bottom-8 sm:w-[340px]" : ""
+                }`}
+              >
                 <div className="glass rounded-2xl p-5 hero-shadow">
                   <div className="flex items-start justify-between">
                     <div>
@@ -93,6 +110,7 @@ export default async function CouriersPage() {
                   </div>
                 </div>
               </div>
+              </div>
             </Reveal>
           </div>
         </div>
@@ -105,6 +123,7 @@ export default async function CouriersPage() {
             {visible(c.why).map((f, i) => (
               <Reveal key={`${f.title}-${i}`} delay={i * 80}>
                 <Card className="h-full">
+                  <CardPhoto name={WHY_PHOTOS[f.icon]} sizes="(min-width: 768px) 33vw, 100vw" />
                   <Icon path={iconPath(f.icon)} />
                   <h3 className="text-[17px] font-semibold tracking-tight">{f.title}</h3>
                   <p className="mt-2.5 text-[13.5px] leading-relaxed text-fg-muted">{f.body}</p>
@@ -125,6 +144,14 @@ export default async function CouriersPage() {
               subtitle={c.tiersSubtitle}
             />
           </Reveal>
+
+          {hasPhoto("courierTeam") && (
+            <Reveal>
+              <div className="relative mt-12 aspect-[16/9] overflow-hidden rounded-[24px] bg-panel sm:aspect-[21/8]">
+                <SitePhoto name="courierTeam" alt="Four SwiftDrop couriers beside their cars at sunset" sizes="(min-width: 1152px) 1152px, 100vw" className="object-[center_30%]" />
+              </div>
+            </Reveal>
+          )}
 
           <div className="mt-14 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {TIERS.map((t, i) => (

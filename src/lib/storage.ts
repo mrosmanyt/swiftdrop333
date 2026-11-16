@@ -52,7 +52,10 @@ async function streamBuffer(stream: ReadableStream<Uint8Array>) {
   return Buffer.concat(chunks);
 }
 
-if (!isBuildPhase) {
+// Local folders are only used when files are kept on disk. On Vercel the
+// filesystem is read-only and uploads go to Blob, so creating them there
+// throws and takes down every page that imports this module.
+if (!isBuildPhase && !useBlob) {
   fs.mkdirSync(DOCUMENT_DIR, { recursive: true });
   fs.mkdirSync(POD_DIR, { recursive: true });
 }

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/marketing/Reveal";
+import { CardPhoto } from "@/components/marketing/SitePhoto";
+import { SITE_IMAGES, type SiteImageKey } from "@/lib/site/images";
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card } from "@/components/marketing/ui";
 import PinMap from "@/components/maps/PinMap";
 import { getContent, visible } from "@/lib/cms/content";
@@ -9,6 +11,12 @@ export const metadata: Metadata = {
   title: "Cities — where SwiftDrop delivers in Canada",
   description: "Local delivery in Calgary, Edmonton, Hamilton, Oshawa, Ottawa, Toronto, Vancouver and Winnipeg.",
 };
+
+/** Photo for a city card, found from the city's name (e.g. "Toronto" → cityToronto). */
+function cityPhoto(name: string): SiteImageKey | undefined {
+  const key = `city${name.trim().replace(/\s+/g, "")}`;
+  return key in SITE_IMAGES ? (key as SiteImageKey) : undefined;
+}
 
 /** Wording: admin console → Website → Cities page. Map positions: src/lib/site/canada.ts. */
 export default async function CitiesPage() {
@@ -40,6 +48,7 @@ export default async function CitiesPage() {
           {visible(c.items).map((city, i) => (
             <Reveal key={`${city.name}-${i}`} delay={(i % 4) * 60}>
               <Card className="h-full">
+                <CardPhoto name={cityPhoto(city.name)} aspect="aspect-[4/3]" sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" />
                 <p className="text-[12px] uppercase tracking-wider text-fg-subtle">{city.province}</p>
                 <h2 className="mt-1.5 text-[20px] font-semibold tracking-tight">{city.name}</h2>
                 <p className="mt-2 text-[13.5px] leading-relaxed text-fg-muted">{city.body}</p>

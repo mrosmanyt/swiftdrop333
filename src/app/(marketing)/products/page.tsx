@@ -2,6 +2,16 @@ import type { Metadata } from "next";
 import Reveal from "@/components/marketing/Reveal";
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card, Icon } from "@/components/marketing/ui";
 import { iconPath } from "@/components/marketing/icons";
+import { CardPhoto } from "@/components/marketing/SitePhoto";
+import type { SiteImageKey } from "@/lib/site/images";
+
+/** Photo for each service card, matched by the card's icon. */
+const PRODUCT_PHOTOS: Record<string, SiteImageKey> = {
+  calendar: "productNextDay",
+  pulse: "productSameDay",
+  pin: "productDirect",
+  batch: "productBatch",
+};
 import { getContent, visible } from "@/lib/cms/content";
 
 export const metadata: Metadata = {
@@ -29,6 +39,7 @@ export default async function ProductsPage() {
           {visible(c.items).map((p, i) => (
             <Reveal key={`${p.name}-${i}`} delay={(i % 2) * 80}>
               <Card className="flex h-full flex-col">
+                <CardPhoto name={PRODUCT_PHOTOS[p.icon]} aspect="aspect-[16/9]" sizes="(min-width: 768px) 50vw, 100vw" />
                 <Icon path={iconPath(p.icon)} />
                 <h2 className="text-[22px] font-semibold tracking-tight">{p.name}</h2>
                 <p className="mt-1 text-[14px] font-medium text-accent">{p.tagline}</p>

@@ -59,6 +59,7 @@ export default function LoginPage() {
 
   return (
     <AuthShell
+      photo="authLogin"
       title="Welcome back"
       subtitle="Sign in to your merchant or courier account."
       footer={

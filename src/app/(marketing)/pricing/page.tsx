@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { listActiveZones } from "@/lib/repo";
 import Reveal from "@/components/marketing/Reveal";
+import SitePhoto, { hasPhoto } from "@/components/marketing/SitePhoto";
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card } from "@/components/marketing/ui";
 import { getContent } from "@/lib/cms/content";
 import { pageMetadata } from "@/lib/cms/seo";
@@ -47,6 +48,17 @@ export default async function PricingPage() {
           </Reveal>
         </div>
       </section>
+
+      {/* Photo band (src/lib/site/images.ts → pricingBand) */}
+      {hasPhoto("pricingBand") && (
+        <section className="px-3 pb-12 sm:px-5">
+          <Reveal>
+            <div className="relative mx-auto aspect-[16/9] max-w-[1400px] overflow-hidden rounded-[28px] bg-bg-soft sm:aspect-[21/7]">
+              <SitePhoto name="pricingBand" alt="Three parcels of different sizes" priority sizes="(min-width: 1400px) 1400px, 100vw" />
+            </div>
+          </Reveal>
+        </section>
+      )}
 
       {/* Service types */}
       <section className="pb-20">

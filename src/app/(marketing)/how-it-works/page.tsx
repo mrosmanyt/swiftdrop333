@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Reveal from "@/components/marketing/Reveal";
+import SitePhoto, { hasPhoto } from "@/components/marketing/SitePhoto";
+import type { SiteImageKey } from "@/lib/site/images";
 import { Eyebrow, SectionHeading, PrimaryButton, SecondaryButton, Card } from "@/components/marketing/ui";
 import { getContent, visible } from "@/lib/cms/content";
 
@@ -8,10 +10,14 @@ export const metadata: Metadata = {
   description: "Create an account, get verified, book a delivery, label it, and we pick up and deliver with live tracking.",
 };
 
+/** Photo for each step, in step order. */
+const STEP_PHOTOS: SiteImageKey[] = ["howSignup", "howApproved", "howBook", "howLabel", "howDeliver"];
+
 /** Wording: admin console → Website → How it works page. */
 export default async function HowItWorksPage() {
   const c = await getContent("howItWorks");
   const steps = visible(c.steps);
+  const anyPhoto = STEP_PHOTOS.some((k) => hasPhoto(k));
   return (
     <>
       <section className="relative overflow-hidden">
@@ -25,23 +31,33 @@ export default async function HowItWorksPage() {
       </section>
 
       <section className="pb-20">
-        <ol className="mx-auto max-w-3xl space-y-4 px-5 sm:px-8">
-          {steps.map((s, i) => (
-            <li key={`${s.title}-${i}`}>
-              <Reveal delay={i * 60}>
-                <Card className="flex gap-5">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-solid text-[15px] font-semibold text-white">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <p className="text-[12px] uppercase tracking-wider text-fg-subtle">Step {i + 1}</p>
-                    <h2 className="mt-1 text-[18px] font-semibold tracking-tight">{s.title}</h2>
-                    <p className="mt-1.5 text-[14.5px] leading-relaxed text-fg-muted">{s.body}</p>
+        <ol className={`mx-auto px-5 sm:px-8 ${anyPhoto ? "max-w-5xl space-y-6 sm:space-y-10" : "max-w-3xl space-y-4"}`}>
+          {steps.map((s, i) => {
+            const photo = STEP_PHOTOS[i] && hasPhoto(STEP_PHOTOS[i]) ? STEP_PHOTOS[i] : undefined;
+            return (
+              <li key={`${s.title}-${i}`}>
+                <Reveal delay={anyPhoto ? 0 : i * 60}>
+                  <div className={photo ? "grid items-center gap-6 md:grid-cols-2 md:gap-10" : ""}>
+                    {photo && (
+                      <div className={`relative aspect-[16/10] overflow-hidden rounded-[20px] bg-bg-soft ${i % 2 === 1 ? "md:order-2" : ""}`}>
+                        <SitePhoto name={photo} alt="" sizes="(min-width: 768px) 50vw, 100vw" />
+                      </div>
+                    )}
+                    <Card className="flex gap-5">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-solid text-[15px] font-semibold text-white">
+                        {i + 1}
+                      </span>
+                      <div>
+                        <p className="text-[12px] uppercase tracking-wider text-fg-subtle">Step {i + 1}</p>
+                        <h2 className="mt-1 text-[18px] font-semibold tracking-tight">{s.title}</h2>
+                        <p className="mt-1.5 text-[14.5px] leading-relaxed text-fg-muted">{s.body}</p>
+                      </div>
+                    </Card>
                   </div>
-                </Card>
-              </Reveal>
-            </li>
-          ))}
+                </Reveal>
+              </li>
+            );
+          })}
         </ol>
       </section>
 

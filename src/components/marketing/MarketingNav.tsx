@@ -30,10 +30,10 @@ export default function MarketingNav({
       // Sits just under the announcement bar when there is one (0px otherwise).
       style={{ top: "var(--announce-h, 0px)" }}
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
-        scrolled ? "border-b border-line bg-bg/80 backdrop-blur-xl" : "border-b border-transparent"
+        scrolled ? "border-b border-line bg-bg/90 backdrop-blur-md" : "border-b border-transparent bg-bg"
       }`}
     >
-      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+      <nav className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="SwiftDrop home">
           <Logo />
         </Link>
@@ -43,7 +43,7 @@ export default function MarketingNav({
             <Link
               key={`${l.href}-${l.label}`}
               href={l.href}
-              className="rounded-lg px-3 py-2 text-[13.5px] text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg"
+              className="rounded-full px-3.5 py-2 text-[14.5px] font-medium text-fg/80 transition-colors hover:bg-fg/[0.06] hover:text-fg"
             >
               {l.label}
             </Link>
@@ -54,13 +54,13 @@ export default function MarketingNav({
           <ThemeToggle />
           <Link
             href="/login"
-            className="rounded-lg px-3 py-2 text-[13.5px] text-fg-muted transition-colors hover:text-fg"
+            className="rounded-full px-3.5 py-2 text-[14.5px] font-medium text-fg/80 transition-colors hover:text-fg"
           >
             {signInLabel}
           </Link>
           <Link
             href="/signup"
-            className="rounded-lg bg-inverse px-3.5 py-2 text-[13.5px] font-medium text-inverse-fg transition-transform hover:scale-[1.02] active:scale-[0.99]"
+            className="rounded-full bg-inverse px-5 py-2.5 text-[14.5px] font-semibold text-inverse-fg transition-opacity hover:opacity-90"
           >
             {ctaLabel}
           </Link>

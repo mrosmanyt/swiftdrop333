@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Reveal from "@/components/marketing/Reveal";
+import SitePhoto, { hasPhoto } from "@/components/marketing/SitePhoto";
 import { Eyebrow, SectionHeading } from "@/components/marketing/ui";
 import ZoneCalculator from "@/components/marketing/ZoneCalculator";
 import { getContent } from "@/lib/cms/content";
@@ -24,6 +25,13 @@ export default async function ZonesPage() {
         <Reveal>
           <SectionHeading eyebrow={<Eyebrow>{c.eyebrow}</Eyebrow>} title={c.title} subtitle={c.subtitle} />
         </Reveal>
+        {hasPhoto("zonesBand") && (
+          <Reveal>
+            <div className="relative mt-10 h-[180px] overflow-hidden rounded-[24px] bg-bg-soft sm:h-[260px]">
+              <SitePhoto name="zonesBand" alt="A Canadian neighbourhood with the downtown skyline behind it" priority sizes="(min-width: 1152px) 1152px, 100vw" className="object-[center_22%]" />
+            </div>
+          </Reveal>
+        )}
         <div className="mt-10">
           <ZoneCalculator note={c.note} outsideText={c.outsideText} />
         </div>
